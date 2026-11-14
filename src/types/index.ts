@@ -1,6 +1,6 @@
 export type Locale = 'en-US' | 'en-GB' | 'fr' | 'es' | 'de' | 'ar' | 'pt-BR' | 'ru';
 export type Theme = 'dark' | 'light';
-export type Role = 'guest' | 'player' | 'support' | 'moderator' | 'admin' | 'superadmin';
+export type Role = 'guest' | 'player' | 'support' | 'moderator' | 'content_manager' | 'analyst' | 'admin' | 'superadmin';
 export type Difficulty = 'easy' | 'medium' | 'hard';
 export type RoomVisibility = 'public' | 'private';
 export type UserStatus = 'active' | 'suspended' | 'banned';
@@ -301,6 +301,7 @@ export interface Toast {
 }
 
 export interface Stroke {
+  id?: string;
   color: string;
   size: number;
   tool: 'pen' | 'eraser';

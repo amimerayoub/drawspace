@@ -1,7 +1,6 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
 import type { User } from '@/types';
-import { authService, db } from '@/services';
-import { commit } from '@/services/db';
+import { authService } from '@/services';
 
 export interface SessionUser {
   id: string;
@@ -13,83 +12,63 @@ export interface SessionUser {
 
 interface AuthCtx {
   user: SessionUser | null;
+  ready: boolean;
   signIn: (identifier: string, password: string) => Promise<User>;
   signUp: (username: string, email: string, password: string) => Promise<User>;
-  continueAsGuest: (username: string, avatarId: string) => SessionUser;
-  signOut: () => void;
-  refresh: () => void;
+  continueAsGuest: (username: string, avatarId: string) => Promise<SessionUser>;
+  signOut: () => Promise<void>;
+  refresh: () => Promise<void>;
 }
 
 const Ctx = createContext<AuthCtx | null>(null);
-const KEY = 'drawspace:session';
-
-function toSession(u: User, isGuest: boolean): SessionUser {
-  return { id: u.id, username: u.username, avatarId: u.avatarId, role: u.role, isGuest };
-}
+const LEGACY_SESSION_KEY = 'drawspace:session';
+const toSession = (user: User): SessionUser => ({ id: user.id, username: user.username, avatarId: user.avatarId, role: user.role, isGuest: user.role === 'guest' });
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<SessionUser | null>(() => {
-    try {
-      const raw = localStorage.getItem(KEY);
-      return raw ? (JSON.parse(raw) as SessionUser) : null;
-    } catch {
-      return null;
-    }
-  });
+  const [user, setUser] = useState<SessionUser | null>(null);
+  const [ready, setReady] = useState(false);
 
   useEffect(() => {
-    try {
-      if (user) localStorage.setItem(KEY, JSON.stringify(user));
-      else localStorage.removeItem(KEY);
-    } catch {
-      /* private mode */
-    }
-  }, [user]);
+    let active = true;
+    try { localStorage.removeItem(LEGACY_SESSION_KEY); } catch { /* private browsing */ }
+    void authService.getCurrentSessionUser().then((session) => {
+      if (active) { setUser(session ? toSession(session) : null); setReady(true); }
+    }).catch(() => {
+      if (active) { setUser(null); setReady(true); }
+    });
+    return () => { active = false; };
+  }, []);
 
-  const persist = (u: User, isGuest: boolean) => {
-    const session = toSession(u, isGuest);
+  const signIn = async (identifier: string, password: string) => {
+    const full = await authService.signIn(identifier, password);
+    setUser(toSession(full));
+    return full;
+  };
+
+  const signUp = async (username: string, email: string, password: string) => {
+    const full = await authService.signUp(username, email, password);
+    setUser(toSession(full));
+    return full;
+  };
+
+  const continueAsGuest = async (username: string, avatarId: string) => {
+    const full = await authService.continueAsGuest(username, avatarId);
+    const session = toSession(full);
     setUser(session);
     return session;
   };
 
-  const signIn = async (identifier: string, password: string) => {
-    const u = await authService.signIn(identifier, password);
-    persist(u, false);
-    return u;
+  const signOut = async () => {
+    await authService.signOut();
+    setUser(null);
   };
 
-  const signUp = async (username: string, email: string, password: string) => {
-    const u = await authService.signUp(username, email, password);
-    persist(u, false);
-    return u;
+  const refresh = async () => {
+    const full = await authService.getCurrentSessionUser();
+    setUser(full ? toSession(full) : null);
   };
 
-  const continueAsGuest = (username: string, avatarId: string) => {
-    let guest = db.users.find((u) => u.id === 'u-guest-local' && u.username === username);
-    if (!guest) {
-      guest = {
-        id: 'u-guest-local', username, email: undefined, avatarId, bio: '', role: 'guest', status: 'active',
-        level: 1, xp: 0, titleId: null, createdAt: new Date().toISOString(), lastSeenAt: new Date().toISOString(),
-        stats: { matches: 0, wins: 0, correctGuesses: 0, wordsDrawn: 0, totalScore: 0, bestScore: 0 },
-        locale: 'en-US',
-      };
-      db.users.push(guest);
-    } else {
-      guest.avatarId = avatarId;
-    }
-    commit();
-    return persist(guest, true);
-  };
-
-  const signOut = () => setUser(null);
-
-  const refresh = () => {
-    if (!user) return;
-    const full = db.users.find((u) => u.id === user.id);
-    if (full) setUser(toSession(full, user.isGuest));
-  };
-
-  return <Ctx.Provider value={{ user, signIn, signUp, continueAsGuest, signOut, refresh }}>{children}</Ctx.Provider>;
+  return <Ctx.Provider value={{ user, ready, signIn, signUp, continueAsGuest, signOut, refresh }}>{children}</Ctx.Provider>;
 }
 
 export function useAuth() {
@@ -99,5 +78,6 @@ export function useAuth() {
 }
 
 export function fullUser(id: string | undefined): User | undefined {
-  return db.users.find((u) => u.id === id);
+  if (!id) return undefined;
+  return authService.localUser(id);
 }

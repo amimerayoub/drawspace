@@ -8,10 +8,12 @@ import { uid } from '@/services/db';
 import { Badge, Button, ConfirmDialog, Field, Input, Modal, NativeSelect, Tabs, Textarea } from '@/components/ui';
 import { DataTable, type Column } from '@/components/DataTable';
 import { AdminPage, useAdmin } from './shared';
+import { UnavailableFeature } from './UnavailableFeature';
 
 const emptySeo: SeoRecord = { route: '', title: '', description: '', canonical: '', ogTitle: '', ogDescription: '', robots: 'index', structuredData: '' };
 
 export default function Seo() {
+  return <UnavailableFeature title="SEO & redirects" explanation="The inspected schema has no SEO or redirect tables. Local demo metadata and redirect changes are disabled." />;
   const db = useDb();
   const { name } = useAdmin();
   const { toast } = useToast();

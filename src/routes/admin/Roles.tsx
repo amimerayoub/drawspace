@@ -7,6 +7,7 @@ import { commit } from '@/services/db';
 import { PERMISSIONS } from '@/data/mock';
 import { Badge, Button } from '@/components/ui';
 import { AdminPage, useAdmin } from './shared';
+import { UnavailableFeature } from './UnavailableFeature';
 
 const ROLE_LABELS: Record<string, string> = {
   superadmin: 'Super Admin', admin: 'Admin', moderator: 'Moderator', support: 'Support Agent',
@@ -19,6 +20,7 @@ const ROLE_DESC: Record<string, string> = {
 };
 
 export default function Roles() {
+  return <UnavailableFeature title="Roles & permissions" explanation="The production table stores assigned admin roles but has no permission matrix or safe role-management workflow. Server authorization remains active; this editor is disabled." />;
   useDb();
   const { name } = useAdmin();
   const { toast } = useToast();

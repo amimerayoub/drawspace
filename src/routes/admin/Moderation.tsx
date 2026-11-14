@@ -1,32 +1,32 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Check, Flag, X } from 'lucide-react';
 import type { Report } from '@/types';
-import { useDb } from '@/hooks/useDb';
 import { useToast } from '@/context/ToastContext';
-import { adminService } from '@/services';
+import { backendAdminService } from '@/services/backendAdmin.service';
 import { Badge, Button, Tabs } from '@/components/ui';
 import { AdminPage, useAdmin } from './shared';
 
 export default function Moderation() {
-  const db = useDb();
-  const { name } = useAdmin();
+  useAdmin();
   const { toast } = useToast();
   const [tab, setTab] = useState('open');
-
-  const counts = {
-    open: db.reports.filter((r) => r.status === 'open').length,
-    resolved: db.reports.filter((r) => r.status === 'resolved').length,
-    dismissed: db.reports.filter((r) => r.status === 'dismissed').length,
+  const [rows, setRows] = useState<Report[]>([]);
+  const [counts, setCounts] = useState({ open: 0, resolved: 0, dismissed: 0 });
+  const [error, setError] = useState('');
+  const load = async (status = tab) => {
+    try { const [open, resolved, dismissed] = await Promise.all(['open', 'resolved', 'dismissed'].map((value) => backendAdminService.reports(value))); setRows(status === 'open' ? open : status === 'resolved' ? resolved : dismissed); setCounts({ open: open.length, resolved: resolved.length, dismissed: dismissed.length }); setError(''); }
+    catch (e) { setError(e instanceof Error ? e.message : 'Moderation queue could not be loaded.'); }
   };
-  const rows = db.reports.filter((r) => r.status === tab);
+  useEffect(() => { void load(); }, [tab]);
 
-  const resolve = (r: Report, status: 'resolved' | 'dismissed') => {
-    adminService.resolveReport(r.id, status, name);
-    toast(status === 'resolved' ? 'Report resolved. Action logged.' : 'Report dismissed.', 'success');
+  const resolve = async (r: Report, status: 'resolved' | 'dismissed') => {
+    try { await backendAdminService.resolveReport(r.id, status, status === 'resolved' ? 'Reviewed and resolved by moderator.' : 'Reviewed and dismissed by moderator.'); await load(tab); toast(status === 'resolved' ? 'Report resolved. Action logged.' : 'Report dismissed.', 'success'); }
+    catch (e) { toast(e instanceof Error ? e.message : 'Report could not be updated.', 'error'); }
   };
 
   return (
     <AdminPage title="Moderation" sub="Player reports from rooms. Every decision is written to the audit log.">
+      {error && <p role="alert" className="muted">{error}</p>}
       <Tabs
         tabs={[
           { id: 'open', label: 'Open', count: counts.open },
@@ -53,8 +53,8 @@ export default function Moderation() {
               <p className="faint admin-report-meta">Target: {r.target} · Reported by {r.reporter}</p>
               {r.status === 'open' && (
                 <div className="admin-report-actions">
-                  <Button size="sm" variant="primary" icon={<Check size={14} />} onClick={() => resolve(r, 'resolved')}>Resolve</Button>
-                  <Button size="sm" variant="ghost" icon={<X size={14} />} onClick={() => resolve(r, 'dismissed')}>Dismiss</Button>
+                  <Button size="sm" variant="primary" icon={<Check size={14} />} onClick={() => void resolve(r, 'resolved')}>Resolve</Button>
+                  <Button size="sm" variant="ghost" icon={<X size={14} />} onClick={() => void resolve(r, 'dismissed')}>Dismiss</Button>
                 </div>
               )}
             </div>

@@ -7,8 +7,10 @@ import { adminService, levelForXp } from '@/services';
 import { commit } from '@/services/db';
 import { Button, Input } from '@/components/ui';
 import { AdminPage, FieldRow, useAdmin } from './shared';
+import { UnavailableFeature } from './UnavailableFeature';
 
 export default function XpConfig() {
+  return <UnavailableFeature title="XP configuration" explanation="There is no production XP configuration table. Match XP rules are server-owned; this demo editor is disabled." />;
   const db = useDb();
   const { name } = useAdmin();
   const { toast } = useToast();

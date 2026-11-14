@@ -8,10 +8,12 @@ import { uid } from '@/services/db';
 import { Badge, Button, ConfirmDialog, Field, Input, Modal, NativeSelect, Textarea } from '@/components/ui';
 import { DataTable, type Column } from '@/components/DataTable';
 import { AdminPage, useAdmin } from './shared';
+import { UnavailableFeature } from './UnavailableFeature';
 
 const SEGMENTS = ['All players', 'Inactive 30 days', 'Level 10+', 'New this week', 'Guests'];
 
 export default function Crm() {
+  return <UnavailableFeature title="CRM & messaging" explanation="The inspected production schema has no CRM campaign or delivery tables. Sending local demo messages is disabled." />;
   const db = useDb();
   const { name } = useAdmin();
   const { toast } = useToast();

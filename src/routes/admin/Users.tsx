@@ -1,141 +1,33 @@
-import { useState } from 'react';
-import { Ban, PauseCircle, Pencil, PlayCircle, Trash2 } from 'lucide-react';
-import type { Role, User } from '@/types';
-import { useDb } from '@/hooks/useDb';
+import { useEffect, useState } from 'react';
 import { useToast } from '@/context/ToastContext';
-import { adminService } from '@/services';
+import { backendAdminService } from '@/services/backendAdmin.service';
+import type { User } from '@/types';
 import { Avatar } from '@/components/Avatar';
-import { Badge, Button, ConfirmDialog, Field, Input, Modal, NativeSelect, Textarea } from '@/components/ui';
+import { Badge, Button, Field, Input, NativeSelect, Textarea, Modal } from '@/components/ui';
 import { DataTable, type Column } from '@/components/DataTable';
 import { AdminPage, useAdmin } from './shared';
 
-const ROLES: Role[] = ['player', 'support', 'moderator', 'admin', 'superadmin'];
-
 export default function UsersAdmin() {
-  const db = useDb();
-  const { name, can } = useAdmin();
+  const { role } = useAdmin();
   const { toast } = useToast();
-  const [editing, setEditing] = useState<User | null>(null);
-  const [viewing, setViewing] = useState<User | null>(null);
-  const [deleting, setDeleting] = useState<User | null>(null);
-  const [form, setForm] = useState({ username: '', bio: '', role: 'player' as Role });
-
-  const openEdit = (u: User) => {
-    setForm({ username: u.username, bio: u.bio, role: u.role });
-    setEditing(u);
-  };
-
-  const save = () => {
-    if (!editing) return;
-    if (form.username.trim().length < 3) { toast('Username needs at least 3 characters.', 'error'); return; }
-    adminService.saveUser({ ...editing, username: form.username.trim(), bio: form.bio, role: form.role }, name);
-    toast('User updated.', 'success');
-    setEditing(null);
-  };
-
-  const setStatus = (u: User, status: User['status']) => {
-    adminService.setUserStatus(u.id, status, name);
-    toast(`${u.username} is now ${status}.`, 'success');
-  };
-
+  const [users, setUsers] = useState<User[]>([]); const [total, setTotal] = useState(0);
+  const [search, setSearch] = useState(''); const [status, setStatus] = useState('');
+  const [selected, setSelected] = useState<User | null>(null); const [reason, setReason] = useState('');
+  const [form, setForm] = useState({ username: '', bio: '', avatarId: '' }); const [loading, setLoading] = useState(false);
+  const refresh = async () => { setLoading(true); try { const result = await backendAdminService.users({ search, status, limit: 100 }); setUsers(result.users); setTotal(result.total); } catch (error) { toast(error instanceof Error ? error.message : 'Could not load users.', 'error'); } finally { setLoading(false); } };
+  useEffect(() => { const timer = setTimeout(() => { void refresh(); }, 250); return () => clearTimeout(timer); }, [search, status]);
+  const act = async (fn: () => Promise<unknown>, success: string) => { try { await fn(); toast(success, 'success'); setSelected(null); setReason(''); await refresh(); } catch (error) { toast(error instanceof Error ? error.message : 'Action failed.', 'error'); } };
   const columns: Column<User>[] = [
-    {
-      key: 'user', header: 'User', width: '26%',
-      render: (u) => (
-        <span className="admin-user-cell">
-          <Avatar avatarId={u.avatarId} size={30} />
-          <span>
-            <span className="admin-user-name">{u.username}</span>
-            <span className="faint admin-user-email">{u.email ?? 'guest'}</span>
-          </span>
-        </span>
-      ),
-      sortValue: (u) => u.username,
-    },
-    { key: 'role', header: 'Role', render: (u) => <Badge tone={u.role === 'player' || u.role === 'guest' ? 'neutral' : 'accent'}>{u.role}</Badge>, sortValue: (u) => u.role },
+    { key: 'user', header: 'User', render: (u) => <span className="admin-user-cell"><Avatar avatarId={u.avatarId} size={30} /><span><span className="admin-user-name">{u.username}</span><span className="faint admin-user-email">{u.email || 'guest'}</span></span></span>, sortValue: (u) => u.username },
+    { key: 'role', header: 'Role', render: (u) => <Badge tone="accent">{u.role}</Badge>, sortValue: (u) => u.role },
     { key: 'status', header: 'Status', render: (u) => <Badge tone={u.status === 'active' ? 'neutral' : 'outline'}>{u.status}</Badge>, sortValue: (u) => u.status },
     { key: 'level', header: 'Level', align: 'end', render: (u) => <span className="mono">{u.level}</span>, sortValue: (u) => u.level },
     { key: 'xp', header: 'XP', align: 'end', render: (u) => <span className="mono">{u.xp.toLocaleString()}</span>, sortValue: (u) => u.xp },
     { key: 'matches', header: 'Matches', align: 'end', render: (u) => <span className="mono">{u.stats.matches}</span>, sortValue: (u) => u.stats.matches },
-    {
-      key: 'actions', header: '', align: 'end', width: '190px',
-      render: (u) => (
-        <span className="admin-row-actions">
-          <Button size="sm" variant="ghost" onClick={() => setViewing(u)}>Stats</Button>
-          {can('users.edit') && <Button size="sm" variant="ghost" icon={<Pencil size={13} />} onClick={() => openEdit(u)} aria-label={`Edit ${u.username}`} />}
-          {can('users.suspend') && u.status === 'active' && (
-            <Button size="sm" variant="ghost" icon={<PauseCircle size={14} />} onClick={() => setStatus(u, 'suspended')} aria-label={`Suspend ${u.username}`} />
-          )}
-          {can('users.suspend') && u.status === 'suspended' && (
-            <Button size="sm" variant="ghost" icon={<PlayCircle size={14} />} onClick={() => setStatus(u, 'active')} aria-label={`Activate ${u.username}`} />
-          )}
-          {can('users.suspend') && u.status !== 'banned' && (
-            <Button size="sm" variant="ghost" icon={<Ban size={14} />} onClick={() => setStatus(u, 'banned')} aria-label={`Ban ${u.username}`} />
-          )}
-          {can('users.edit') && (
-            <Button size="sm" variant="ghost" icon={<Trash2 size={14} />} onClick={() => setDeleting(u)} aria-label={`Delete ${u.username}`} />
-          )}
-        </span>
-      ),
-    },
+    { key: 'actions', header: 'Actions', align: 'end', render: (u) => <span className="admin-row-actions"><Button size="sm" variant="ghost" onClick={async () => { try { setSelected(await backendAdminService.user(u.id)); setForm({ username: u.username, bio: u.bio, avatarId: u.avatarId }); } catch (e) { toast(e instanceof Error ? e.message : 'Could not load user.', 'error'); } }}>Details</Button>{u.status === 'active' ? <Button size="sm" variant="ghost" onClick={() => { setSelected(u); setReason(''); }}>Suspend</Button> : <Button size="sm" variant="ghost" onClick={() => void act(() => backendAdminService.setUserStatus(u.id, 'active', 'Account reinstated by administrator.'), 'Account reactivated.')}>Unban</Button>}</span> },
   ];
-
-  return (
-    <AdminPage title="User management" sub={`${db.users.length} accounts, guests included.`}>
-      <div className="panel">
-        <DataTable
-          columns={columns}
-          rows={db.users}
-          rowKey={(u) => u.id}
-          searchable
-          searchPlaceholder="Search username or email"
-          searchLabel="Search users"
-          searchValue={(u) => `${u.username} ${u.email ?? ''} ${u.role} ${u.status}`}
-          emptyTitle="No users match"
-        />
-      </div>
-
-      <Modal open={Boolean(editing)} onClose={() => setEditing(null)} title={`Edit ${editing?.username ?? ''}`}
-        footer={<>
-          <Button variant="ghost" onClick={() => setEditing(null)}>Cancel</Button>
-          <Button variant="primary" onClick={save}>Save</Button>
-        </>}>
-        <Field label="Username" htmlFor="u-name">
-          <Input id="u-name" value={form.username} onChange={(e) => setForm({ ...form, username: e.target.value })} maxLength={20} />
-        </Field>
-        <Field label="Role" htmlFor="u-role" hint="Role changes apply the matching permission set.">
-          <NativeSelect id="u-role" value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value as Role })}>
-            {ROLES.map((r) => <option key={r} value={r}>{r}</option>)}
-          </NativeSelect>
-        </Field>
-        <Field label="Bio" htmlFor="u-bio">
-          <Textarea id="u-bio" value={form.bio} onChange={(e) => setForm({ ...form, bio: e.target.value })} rows={3} />
-        </Field>
-      </Modal>
-
-      <Modal open={Boolean(viewing)} onClose={() => setViewing(null)} title={`${viewing?.username ?? ''} statistics`}>
-        {viewing && (
-          <div className="admin-stat-grid admin-stat-grid-3">
-            {[
-              ['Matches', viewing.stats.matches], ['Wins', viewing.stats.wins],
-              ['Correct guesses', viewing.stats.correctGuesses], ['Words drawn', viewing.stats.wordsDrawn],
-              ['Total score', viewing.stats.totalScore], ['Best score', viewing.stats.bestScore],
-            ].map(([label, value]) => (
-              <div key={label} className="panel admin-stat">
-                <span className="admin-stat-value mono">{Number(value).toLocaleString()}</span>
-                <span className="admin-stat-label">{label}</span>
-              </div>
-            ))}
-          </div>
-        )}
-      </Modal>
-
-      <ConfirmDialog
-        open={Boolean(deleting)} onClose={() => setDeleting(null)}
-        onConfirm={() => { if (deleting) { adminService.removeUser(deleting.id, name); toast('User deleted.', 'success'); } }}
-        title="Delete user" body={`Delete ${deleting?.username}? This removes the account and its stats from the demo data.`}
-        confirmLabel="Delete"
-      />
-    </AdminPage>
-  );
+  return <AdminPage title="User management" sub={`${total} accounts from Appwrite Users.`}><div className="panel" style={{ padding: 16 }}><div style={{ display: 'flex', gap: 12, marginBottom: 16 }}><Input aria-label="Search users" placeholder="Search name or email" value={search} onChange={(e) => setSearch(e.target.value)} /><NativeSelect aria-label="Filter status" value={status} onChange={(e) => setStatus(e.target.value)}><option value="">All statuses</option><option value="active">Active</option><option value="suspended">Suspended</option><option value="banned">Banned</option></NativeSelect></div>{loading ? <p>Loading accounts…</p> : <DataTable columns={columns} rows={users} rowKey={(u) => u.id} emptyTitle="No users match" />}</div>
+    <Modal open={Boolean(selected)} onClose={() => setSelected(null)} title={`${selected?.username ?? ''} account`} footer={<Button variant="ghost" onClick={() => setSelected(null)}>Close</Button>}>
+      {selected && <><p>{selected.email || 'Guest account'} · {selected.status} · Level {selected.level} · {selected.xp} XP</p><p>Matches {selected.stats.matches} · Wins {selected.stats.wins} · Correct guesses {selected.stats.correctGuesses}</p><Field label="Username"><Input value={form.username} onChange={(e) => setForm({ ...form, username: e.target.value })} /></Field><Field label="Bio"><Textarea value={form.bio} onChange={(e) => setForm({ ...form, bio: e.target.value })} rows={3} /></Field><Field label="Avatar ID"><Input value={form.avatarId} onChange={(e) => setForm({ ...form, avatarId: e.target.value })} /></Field><Button onClick={() => void act(() => backendAdminService.updateUser(selected.id, form), 'Profile updated.')}>Save profile</Button>{role === 'superadmin' && <><Field label="Role"><NativeSelect value={selected.role} onChange={(e) => setSelected({ ...selected, role: e.target.value as User['role'] })}><option value="player">player</option><option value="support">support</option><option value="moderator">moderator</option><option value="content_manager">content manager</option><option value="analyst">analyst</option><option value="admin">admin</option><option value="superadmin">superadmin</option></NativeSelect></Field><Button onClick={() => void act(() => backendAdminService.setUserRole(selected.id, selected.role, 'Role updated from user management.'), 'Role updated.')}>Save role</Button></>}{selected.status === 'active' && <><Field label="Reason for suspension"><Input value={reason} onChange={(e) => setReason(e.target.value)} minLength={3} /></Field><Button variant="danger" disabled={reason.trim().length < 3} onClick={() => void act(() => backendAdminService.setUserStatus(selected.id, 'suspended', reason), 'Account suspended.')}>Suspend account</Button></>}</>}
+    </Modal></AdminPage>;
 }

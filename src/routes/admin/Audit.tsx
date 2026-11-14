@@ -1,16 +1,18 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { AuditEntry } from '@/types';
-import { useDb } from '@/hooks/useDb';
 import { Badge, NativeSelect } from '@/components/ui';
+import { backendAdminService } from '@/services/backendAdmin.service';
 import { DataTable, type Column } from '@/components/DataTable';
 import { AdminPage } from './shared';
 
 export default function Audit() {
-  const db = useDb();
+  const [entries, setEntries] = useState<AuditEntry[]>([]);
+  const [error, setError] = useState('');
+  useEffect(() => { void backendAdminService.audit().then(setEntries).catch((e: unknown) => setError(e instanceof Error ? e.message : 'Audit log could not be loaded.')); }, []);
   const [actionFilter, setActionFilter] = useState('all');
 
-  const groups = [...new Set(db.audit.map((a) => a.action.split('.')[0]))].sort();
-  const rows = actionFilter === 'all' ? db.audit : db.audit.filter((a) => a.action.startsWith(`${actionFilter}.`));
+  const groups = [...new Set(entries.map((a) => a.action.split('.')[0]))].sort();
+  const rows = actionFilter === 'all' ? entries : entries.filter((a) => a.action.startsWith(`${actionFilter}.`));
 
   const columns: Column<AuditEntry>[] = [
     {
@@ -35,7 +37,8 @@ export default function Audit() {
   ];
 
   return (
-    <AdminPage title="Audit logs" sub={`${db.audit.length} entries. Every admin mutation records before and after values.`}>
+    <AdminPage title="Audit logs" sub={`${entries.length} entries. The production audit schema records actor, action, target, status, and reason.`}>
+      {error && <p role="alert" className="muted">{error}</p>}
       <div className="panel">
         <DataTable
           columns={columns}

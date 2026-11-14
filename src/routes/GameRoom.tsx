@@ -1,294 +1,203 @@
-import { useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, Navigate, useNavigate, useParams } from 'react-router-dom';
-import { Flag, LogOut, MessageCircle, RefreshCw, Users, Volume2, VolumeX } from 'lucide-react';
-import type { Room, Word } from '@/types';
+import { Flag, LogOut, MessageCircle, Trophy, Users, Volume2, VolumeX } from 'lucide-react';
+import type { ChatMessage, RoomPlayer, Stroke } from '@/types';
 import { useI18n } from '@/i18n/I18nContext';
-import { useAuth, fullUser, type SessionUser } from '@/context/AuthContext';
-import { useDb } from '@/hooks/useDb';
+import { useAuth } from '@/context/AuthContext';
 import { useToast } from '@/context/ToastContext';
-import { useSoundToggle } from '@/hooks/useSound';
-import { useKeyboardViewport } from '@/hooks/useKeyboardViewport';
-import { authService, progressionService, reportService, roomService } from '@/services';
-import { useGameEngine, type MatchResults } from '@/game/useGameEngine';
+import { socketClient } from '@/services/socketClient';
+import { apiPost } from '@/services/apiClient';
 import { DrawingCanvas } from '@/game/DrawingCanvas';
 import { ChatPanel } from '@/game/ChatPanel';
 import { PlayerList } from '@/game/PlayerList';
-import { Avatar } from '@/components/Avatar';
-import { Badge, Button, ConfirmDialog, EmptyState, Field, IconButton, Modal, NativeSelect, Spinner, Textarea } from '@/components/ui';
+import { useSoundToggle } from '@/hooks/useSound';
+import { useKeyboardViewport } from '@/hooks/useKeyboardViewport';
 import { SeoHead } from '@/components/SeoHead';
+import { Button, Field, Modal, NativeSelect, Spinner, Textarea } from '@/components/ui';
 
-function WordDisplay({ word, hintIndices, showWord }: { word: Word | null; hintIndices: number[]; showWord: boolean }) {
-  if (!word) return <span className="word-display faint">···</span>;
-  if (showWord) return <span className="word-display word-known mono">{word.text}</span>;
-  return (
-    <span className="word-display mono" aria-label={`${word.text.length} letters`}>
-      {word.text.split('').map((ch, i) => (
-        <span key={i} className={hintIndices.includes(i) ? 'word-letter revealed' : 'word-letter'}>
-          {ch === ' ' ? ' ' : hintIndices.includes(i) ? ch : '_'}
-        </span>
-      ))}
-    </span>
-  );
+interface RoomSnapshot {
+  id: string; code: string; name: string; hostId: string;
+  status: 'waiting' | 'choosing' | 'drawing' | 'round_end' | 'finished';
+  settings: { visibility: string; maxPlayers: number; rounds: number; roundSeconds: number; difficulty: string; wordMode: string; hasPassword: boolean };
+  players: Array<{ userId: string; username: string; avatarId: string; score: number; ready: boolean; connected: boolean; host: boolean; hasGuessed?: boolean }>;
+  round: number; rounds: number; drawerUserId: string | null; deadline: number | null; strokes: Stroke[];
 }
+interface Choice { id: string; word: string; category: string }
+interface Standing { place: number; userId: string; username: string; avatarId: string; score: number }
+interface ProgressionAward { xp: number; totalXP?: number; duplicate?: boolean }
 
 export default function GameRoom() {
   const { t, path } = useI18n();
   const { user } = useAuth();
-  const { code } = useParams();
-  const dbState = useDb();
-  const room = dbState.rooms.find((r) => r.code === code?.toUpperCase());
-
-  if (!user) return <Navigate to={path('/play')} replace />;
-  if (!room) {
-    return (
-      <div className="page container container-narrow">
-        <EmptyState title={t('join.notFound')} action={<Link to={path('/lobby')} className="btn btn-primary btn-sm">{t('results.backToLobby')}</Link>} />
-      </div>
-    );
-  }
-  if (room.status === 'waiting') return <Navigate to={path(`/room/${room.code}`)} replace />;
-  if (!room.players.some((p) => p.id === user.id)) return <Navigate to={path(`/join/${room.code}`)} replace />;
-
-  return <GameSession room={room} user={user} />;
-}
-
-function GameSession({ room, user }: { room: Room; user: SessionUser }) {
-  const { t, path } = useI18n();
-  const { refresh } = useAuth();
+  const { code: routeCode } = useParams();
   const navigate = useNavigate();
   const { toast } = useToast();
   const [soundOn, toggleSound] = useSoundToggle();
-  const [leaveOpen, setLeaveOpen] = useState(false);
+  const chatInputRef = useRef<HTMLInputElement>(null);
+  const reportFormRef = useRef<HTMLFormElement>(null);
+  const code = (routeCode || '').toUpperCase();
+  const [room, setRoom] = useState<RoomSnapshot | null>(null);
+  const [phase, setPhase] = useState<'choosing' | 'drawing' | 'reveal' | 'finished'>('choosing');
+  const [choices, setChoices] = useState<Choice[]>([]);
+  const [answer, setAnswer] = useState<string | null>(null);
+  const [wordLength, setWordLength] = useState(0);
+  const [deadline, setDeadline] = useState<number | null>(null);
+  const [remaining, setRemaining] = useState(0);
+  const [strokes, setStrokes] = useState<Stroke[]>([]);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [standings, setStandings] = useState<Standing[]>([]);
+  const [progressionAward, setProgressionAward] = useState<ProgressionAward | null>(null);
+  const [loadingError, setLoadingError] = useState('');
   const [reportOpen, setReportOpen] = useState(false);
-  const [reportReason, setReportReason] = useState('drawing');
-  const [reportDetail, setReportDetail] = useState('');
+  const [reportTarget, setReportTarget] = useState('');
+  const [reportType, setReportType] = useState<'drawing' | 'chat' | 'harassment' | 'cheating' | 'other'>('other');
+  const [reportDescription, setReportDescription] = useState('');
+  const [reporting, setReporting] = useState(false);
   const [sideTab, setSideTab] = useState<'chat' | 'players'>('chat');
   const [chatUnread, setChatUnread] = useState(0);
-  const chatInputRef = useRef<HTMLInputElement>(null);
   useKeyboardViewport();
 
-  const handleFinish = (results: MatchResults) => {
-    progressionService.recordMatch(user.id, {
-      roomName: room.name, playedAt: new Date().toISOString(), players: room.players.length,
-      placement: results.myPlace, score: results.myScore, xpEarned: results.xpEarned, rounds: room.settings.rounds,
-    });
-    const full = fullUser(user.id);
-    if (full) {
-      authService.updateUser(user.id, {
-        stats: {
-          ...full.stats,
-          correctGuesses: full.stats.correctGuesses + results.correctCount,
-          wordsDrawn: full.stats.wordsDrawn + results.turnsDrawn,
-        },
-      });
-    }
-    roomService.finish(room.code);
-    refresh();
-    try {
-      sessionStorage.setItem(`drawspace:results:${room.code}`, JSON.stringify(results));
-    } catch { /* private mode */ }
-    navigate(path(`/results/${room.code}`), { replace: true });
+  useEffect(() => {
+    if (!user || !code) return;
+    let active = true;
+    const disposers: Array<() => void> = [];
+    const addMessage = (message: Omit<ChatMessage, 'id'>) => setMessages((current) => [...current.slice(-99), { ...message, id: Date.now() + Math.random() }]);
+    void socketClient.connect().then(async () => {
+      disposers.push(socketClient.on<RoomSnapshot>('room:update', (next) => {
+        if (active && next.code === code) {
+          setRoom(next); setStrokes(next.strokes || []);
+          if (next.status === 'waiting') navigate(path(`/room/${code}`), { replace: true });
+          if (next.status === 'finished') setPhase('finished');
+          else if (next.status === 'drawing') setPhase('drawing');
+          else if (next.status === 'choosing') setPhase('choosing');
+        }
+      }));
+      disposers.push(socketClient.on<Choice[]>('game:word-choices', (items) => { if (active) { setChoices(items); setPhase('choosing'); } }));
+      disposers.push(socketClient.on<{ word: string }>('game:your-word', (item) => { if (active) setAnswer(item.word); }));
+      disposers.push(socketClient.on<{ round: number; drawerUserId: string; deadline: number; wordLength: number }>('game:round-start', (item) => {
+        if (active) { setPhase('drawing'); setAnswer(null); setChoices([]); setWordLength(item.wordLength); setDeadline(item.deadline); setRemaining(Math.max(0, Math.ceil((item.deadline - Date.now()) / 1000))); setStrokes([]); }
+      }));
+      disposers.push(socketClient.on<{ remainingSeconds: number; deadline: number }>('game:timer', (item) => { if (active) { setRemaining(item.remainingSeconds); setDeadline(item.deadline); } }));
+      disposers.push(socketClient.on<Stroke>('game:stroke', (stroke) => { if (active) setStrokes((current) => [...current, stroke]); }));
+      disposers.push(socketClient.on<{ strokes: Stroke[] }>('game:drawing-state', (state) => { if (active) setStrokes(state.strokes); }));
+      disposers.push(socketClient.on<{ userId: string; username: string; text: string; at: number }>('game:chat', (message) => addMessage({ playerId: message.userId, username: message.username, text: message.text, at: message.at, kind: 'guess' })));
+      disposers.push(socketClient.on<{ userId: string; username: string; points: number }>('game:correct-guess', (message) => addMessage({ playerId: message.userId, username: message.username, text: `guessed correctly (+${message.points})`, at: Date.now(), kind: 'correct' })));
+      disposers.push(socketClient.on<{ round: number; word: string; scores: Array<{ userId: string; score: number }> }>('game:round-end', (item) => { if (active) { setPhase('reveal'); setAnswer(item.word); } }));
+      disposers.push(socketClient.on<{ roomCode: string; standings: Standing[] }>('game:match-end', (item) => { if (active) { setStandings(item.standings); setPhase('finished'); } }));
+      disposers.push(socketClient.on<ProgressionAward>('game:progression-earned', (item) => { if (active && !item.duplicate) setProgressionAward(item); }));
+      try {
+        const joined = await socketClient.request<{ room: RoomSnapshot }>('room:join', { code });
+        if (!active) return;
+        setRoom(joined.room); setStrokes(joined.room.strokes || []);
+        if (joined.room.status === 'waiting') navigate(path(`/room/${code}`), { replace: true });
+        else if (joined.room.status === 'drawing') setPhase('drawing');
+        else if (joined.room.status === 'finished') setPhase('finished');
+        else setPhase('choosing');
+        setDeadline(joined.room.deadline);
+      } catch (error) { if (active) setLoadingError(error instanceof Error ? error.message : 'Could not join this game.'); }
+    }).catch((error: unknown) => { if (active) setLoadingError(error instanceof Error ? error.message : 'Could not connect to the game server.'); });
+    return () => { active = false; disposers.forEach((dispose) => dispose()); };
+  }, [user?.id, code, navigate, path]);
+
+  useEffect(() => {
+    if (!deadline || phase !== 'drawing') return;
+    const update = () => setRemaining(Math.max(0, Math.ceil((deadline - Date.now()) / 1000)));
+    update(); const timer = window.setInterval(update, 250);
+    return () => window.clearInterval(timer);
+  }, [deadline, phase]);
+
+  const scores = useMemo(() => Object.fromEntries((room?.players || []).map((player) => [player.userId, player.score])), [room]);
+  const players = useMemo<RoomPlayer[]>(() => (room?.players || []).map((player) => ({
+    id: player.userId, username: player.username, avatarId: player.avatarId, score: player.score,
+    isHost: player.host, isBot: false, guessed: Boolean(player.hasGuessed),
+  })), [room]);
+  const drawer = room?.players.find((player) => player.userId === room.drawerUserId);
+  const isDrawer = room?.drawerUserId === user?.id;
+  const guessedIds = room?.players.filter((player) => player.hasGuessed).map((player) => player.userId) || [];
+
+  if (!user) return <Navigate to={path('/play')} replace />;
+  if (!room) return <div className="page container container-narrow">{loadingError ? <p role="alert">{loadingError} <Link to={path('/lobby')}>Back to lobby</Link></p> : <Spinner label="Connecting to game…" />}</div>;
+
+  const sendGuess = (text: string) => {
+    void socketClient.request('game:guess', { code, text }).catch((error) => toast(error instanceof Error ? error.message : 'Guess could not be sent.', 'error'));
+    return 'chat' as const;
   };
-
-  const engine = useGameEngine(room, user.id, t, handleFinish);
-  const { state } = engine;
-  const drawer = room.players.find((p) => p.id === state.drawerId);
-  const seconds = Math.ceil(state.timeLeft);
-  const pct = Math.max(0, Math.min(100, (state.timeLeft / state.timeTotal) * 100));
-
-  const leave = () => {
-    roomService.removePlayer(room.code, user.id);
+  const leave = async () => {
+    await socketClient.request('room:leave', { code }).catch(() => undefined);
     navigate(path('/lobby'));
   };
-
-  const sendReport = () => {
-    reportService.create({
-      type: reportReason as 'drawing', target: `${room.code} / ${drawer?.username ?? ''}`,
-      reporter: user.username, reason: reportReason, detail: reportDetail.trim() || reportReason,
-    });
-    setReportOpen(false);
-    setReportDetail('');
-    toast(t('toast.reported'), 'success');
+  const choose = async (item: Choice) => {
+    try { await socketClient.request('game:choose-word', { code, id: item.id }); setChoices([]); }
+    catch (error) { toast(error instanceof Error ? error.message : 'Word choice failed.', 'error'); }
   };
+  const sendStroke = (stroke: Stroke) => {
+    void socketClient.request('game:stroke', { code, stroke }).catch((error) => toast(error instanceof Error ? error.message : 'Drawing could not be synchronized.', 'error'));
+  };
+  const sendDrawingAction = (action: 'undo' | 'redo' | 'clear') => {
+    void socketClient.request(action === 'clear' ? 'game:clear' : `game:${action}`, { code }).catch((error) => toast(error instanceof Error ? error.message : 'Drawing action failed.', 'error'));
+  };
+  const submitReport = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!reportTarget || reporting) return;
+    setReporting(true);
+    try {
+      await apiPost('/api/reports', { roomCode: code, reportedUserId: reportTarget, reportType, description: reportDescription });
+      setReportOpen(false);
+      setReportDescription('');
+      toast('Report sent to moderators.', 'success');
+    } catch (error) { toast(error instanceof Error ? error.message : 'Report could not be sent.', 'error'); }
+    finally { setReporting(false); }
+  };
+  const pct = Math.max(0, Math.min(100, room.settings.roundSeconds ? (remaining / room.settings.roundSeconds) * 100 : 0));
 
   return (
     <div className="game-shell">
       <SeoHead title={`${room.name} · DrawSpace`} />
       <header className="game-topbar">
-        <div className="game-top-left">
-          <Link to={path('/')} className="game-brand" aria-label="DrawSpace">
-            <svg width="22" height="22" viewBox="0 0 32 32" aria-hidden><rect width="32" height="32" rx="7" fill="var(--accent)" /><path d="M9 20c4-8 9-11 14-11-2 5-6 10-11 12l-3 1z" fill="#062a30" /><circle cx="21.5" cy="11.5" r="1.6" fill="#062a30" /></svg>
-          </Link>
-          <div className="game-room-meta">
-            <span className="game-room-name">{room.name}</span>
-            <span className="game-round faint">{t('game.roundOf', { current: state.round, total: state.totalRounds })}</span>
-          </div>
-        </div>
-
+        <div className="game-top-left"><Link to={path('/')} className="game-brand" aria-label="DrawSpace">✦</Link><div className="game-room-meta"><span className="game-room-name">{room.name}</span><span className="game-round faint">{t('game.roundOf', { current: room.round, total: room.rounds })}</span></div></div>
         <div className="game-word-area">
-          {state.phase === 'choosing' ? (
-            <span className="faint game-choosing-note">
-              {engine.isMyTurn ? t('game.chooseWord') : t('game.drawer', { name: drawer?.username ?? '' })}
-            </span>
-          ) : (
-            <>
-              <WordDisplay word={state.word} hintIndices={state.hintIndices} showWord={engine.isMyTurn || state.phase !== 'drawing'} />
-              {state.word && !engine.isMyTurn && state.phase === 'drawing' && (
-                <span className="faint game-letter-count">{t('game.letters', { count: state.word.text.length })}</span>
-              )}
-            </>
-          )}
+          {phase === 'choosing' && isDrawer
+            ? <span className="faint game-choosing-note">{t('game.chooseWord')}</span>
+            : phase === 'choosing'
+              ? <span className="faint game-choosing-note">{t('game.drawer', { name: drawer?.username ?? '' })}</span>
+              : answer
+                ? <span className="word-display word-known mono">{answer}</span>
+                : <span className="word-display mono" aria-label={`${wordLength} letters`}>{Array.from({ length: wordLength }, (_, index) => <span key={index} className="word-letter">_</span>)}</span>}
         </div>
-
-        <div className="game-top-right">
-          <div className={`game-timer ${seconds <= 5 && state.phase === 'drawing' ? 'urgent' : ''}`} role="timer" aria-label={`${seconds}s`}>
-            <span className="mono game-timer-value">{state.phase === 'finished' ? 0 : seconds}</span>
-            <span className="faint game-timer-unit">s</span>
-          </div>
-          <IconButton label={soundOn ? t('common.soundOn') : t('common.soundOff')} onClick={toggleSound} aria-pressed={soundOn}>
-            {soundOn ? <Volume2 size={17} /> : <VolumeX size={17} />}
-          </IconButton>
-          <IconButton label={t('report.title')} onClick={() => setReportOpen(true)}>
-            <Flag size={16} />
-          </IconButton>
-          <IconButton label={t('common.leave')} onClick={() => setLeaveOpen(true)}>
-            <LogOut size={16} />
-          </IconButton>
-        </div>
+        <div className="game-top-right"><div className={`game-timer ${remaining <= 5 && phase === 'drawing' ? 'urgent' : ''}`} role="timer"><span className="mono game-timer-value">{phase === 'drawing' ? remaining : 0}</span><span className="faint game-timer-unit">s</span></div><button className="icon-button" onClick={toggleSound} aria-label={soundOn ? t('common.soundOn') : t('common.soundOff')}>{soundOn ? <Volume2 size={17} /> : <VolumeX size={17} />}</button><Button variant="ghost" size="sm" icon={<Flag size={15} />} onClick={() => setReportOpen(true)}>Report</Button><Button variant="ghost" size="sm" icon={<LogOut size={15} />} onClick={() => void leave()}>{t('common.leave')}</Button></div>
       </header>
-      <div className="game-timer-bar" aria-hidden>
-        <div className="game-timer-fill" style={{ width: `${pct}%` }} />
-      </div>
-
+      <div className="game-timer-bar" aria-hidden><div className="game-timer-fill" style={{ width: `${pct}%` }} /></div>
       <main className="game-main">
         <section className="game-canvas-col">
-          <div className="game-canvas-frame">
-            <DrawingCanvas
-              key={state.turnIndex}
-              interactive={engine.isMyTurn && state.phase === 'drawing'}
-              replayStrokes={state.replayStrokes}
-            />
-
-            {state.phase === 'choosing' && (
-              <div className="canvas-overlay">
-                {engine.isMyTurn ? (
-                  <div className="word-choice glass-overlay">
-                    <p className="word-choice-title">{t('game.chooseWord')}</p>
-                    <div className="word-choice-grid">
-                      {state.choices.map((w) => (
-                        <button key={w.id} className="word-choice-card" onClick={() => engine.chooseWord(w)}>
-                          <span className="word-choice-word">{w.text}</span>
-                          <span className="word-choice-meta faint">{w.category} · {t(`common.${w.difficulty}` as 'common.easy')}</span>
-                        </button>
-                      ))}
-                    </div>
-                    <div className="word-choice-foot">
-                      <span className="mono faint">{seconds}s</span>
-                      <Button size="sm" variant="ghost" icon={<RefreshCw size={13} />} onClick={engine.rerollChoices}>
-                        {t('game.skipWord')}
-                      </Button>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="word-waiting glass-overlay">
-                    <Avatar avatarId={drawer?.avatarId ?? 'av-01'} size={40} />
-                    <p className="muted">{t('game.drawer', { name: drawer?.username ?? '' })}</p>
-                    <Spinner label={t('common.loading')} />
-                  </div>
-                )}
-              </div>
-            )}
-
-            {state.phase === 'reveal' && state.word && (
-              <div className="canvas-overlay reveal-overlay">
-                <div className="reveal-card glass-overlay">
-                  <p className="faint reveal-label">{t('common.word')}</p>
-                  <p className="reveal-word">{state.word.text}</p>
-                  {state.word.definition && <p className="muted reveal-def">{state.word.definition}</p>}
-                  <p className="faint reveal-next mono">{t('game.nextRound')} · {seconds}s</p>
-                </div>
-              </div>
-            )}
-
-            {state.phase === 'drawing' && engine.myGuessed && (
-              <div className="guessed-banner" role="status">
-                <Badge tone="accent">{t('game.guessedIt')}</Badge>
-                <span className="faint">{t('game.waitNext')}</span>
-              </div>
-            )}
-          </div>
+          {phase === 'choosing' && isDrawer && choices.length > 0 && <div className="panel panel-pad"><p>{t('game.chooseWord')}</p><div className="word-choice-grid">{choices.map((item) => <Button key={item.id} variant="secondary" onClick={() => void choose(item)}>{item.word} <span className="faint">{item.category}</span></Button>)}</div></div>}
+          {phase === 'choosing' && !isDrawer && <div className="panel panel-pad"><Spinner label="Waiting for the drawer to choose a word…" /></div>}
+          {phase === 'reveal' && answer && <div className="panel panel-pad"><p>Round complete: <strong>{answer}</strong></p></div>}
+          {phase === 'finished' && <div className="panel panel-pad"><h2><Trophy size={18} /> {t('results.title')}</h2><ol>{standings.map((entry) => <li key={entry.userId}>{entry.place}. {entry.username} — {entry.score}</li>)}</ol>{progressionAward && <p className="accent">+{progressionAward.xp} XP earned · {progressionAward.totalXP} XP total</p>}<Button variant="primary" onClick={() => navigate(path('/lobby'))}>{t('results.backToLobby')}</Button></div>}
+          <div className="game-canvas-frame"><DrawingCanvas interactive={Boolean(isDrawer && phase === 'drawing')} replayStrokes={strokes} onStroke={sendStroke} onUndo={() => sendDrawingAction('undo')} onRedo={() => sendDrawingAction('redo')} onClear={() => sendDrawingAction('clear')} /></div>
         </section>
-
         <div className="game-side-stack">
           <div className="game-tabs" role="group" aria-label={t('game.panelTabs')}>
-            <button
-              type="button"
-              className={`game-tab ${sideTab === 'chat' ? 'active' : ''}`}
-              aria-pressed={sideTab === 'chat'}
-              aria-controls="game-panel-chat"
-              onClick={() => setSideTab('chat')}
-            >
-              <MessageCircle size={15} aria-hidden />
-              <span>{t('game.chat')}</span>
-              {chatUnread > 0 && sideTab !== 'chat' && (
-                <span className="game-tab-badge mono">{chatUnread > 99 ? '99+' : chatUnread}</span>
-              )}
+            <button type="button" className={`game-tab ${sideTab === 'chat' ? 'active' : ''}`} aria-pressed={sideTab === 'chat'} aria-controls="game-panel-chat" onClick={() => setSideTab('chat')}>
+              <MessageCircle size={15} aria-hidden /><span>{t('game.chat')}</span>{chatUnread > 0 && sideTab !== 'chat' && <span className="game-tab-badge mono">{chatUnread > 99 ? '99+' : chatUnread}</span>}
             </button>
-            <button
-              type="button"
-              className={`game-tab ${sideTab === 'players' ? 'active' : ''}`}
-              aria-pressed={sideTab === 'players'}
-              aria-controls="game-panel-players"
-              onClick={() => setSideTab('players')}
-            >
-              <Users size={15} aria-hidden />
-              <span>{t('game.players')}</span>
-              <span className="game-tab-count mono faint">{room.players.length}</span>
+            <button type="button" className={`game-tab ${sideTab === 'players' ? 'active' : ''}`} aria-pressed={sideTab === 'players'} aria-controls="game-panel-players" onClick={() => setSideTab('players')}>
+              <Users size={15} aria-hidden /><span>{t('game.players')}</span><span className="game-tab-count mono faint">{room.players.length}</span>
             </button>
           </div>
-
           <aside id="game-panel-players" className={`game-side game-side-players ${sideTab === 'players' ? '' : 'tab-hidden'}`}>
-            <PlayerList
-              players={room.players} scores={state.scores} guessedIds={state.guessedIds}
-              drawerId={state.drawerId} myId={user.id} hostId={room.hostId}
-            />
+            <PlayerList players={players} scores={scores} guessedIds={guessedIds} drawerId={room.drawerUserId || ''} myId={user.id} hostId={room.hostId} />
           </aside>
-
           <aside id="game-panel-chat" className={`game-side game-side-chat ${sideTab === 'chat' ? '' : 'tab-hidden'}`}>
-            <ChatPanel
-              messages={state.messages}
-              onSend={engine.submitGuess}
-              disabled={state.phase === 'finished'}
-              inputRef={chatInputRef}
-              active={sideTab === 'chat'}
-              onUnreadChange={setChatUnread}
-            />
+            <ChatPanel messages={messages} onSend={sendGuess} disabled={phase !== 'drawing' || isDrawer || guessedIds.includes(user.id)} inputRef={chatInputRef} active={sideTab === 'chat'} onUnreadChange={setChatUnread} />
           </aside>
         </div>
       </main>
-
-      <ConfirmDialog
-        open={leaveOpen} onClose={() => setLeaveOpen(false)} onConfirm={leave}
-        title={t('common.leave')} body={`${t('common.leave')} ${room.name}?`}
-        confirmLabel={t('common.leave')} cancelLabel={t('common.cancel')}
-      />
-
-      <Modal open={reportOpen} onClose={() => setReportOpen(false)} title={t('report.title')}
-        footer={<>
-          <Button variant="ghost" onClick={() => setReportOpen(false)}>{t('common.cancel')}</Button>
-          <Button variant="primary" onClick={sendReport}>{t('report.submit')}</Button>
-        </>}>
-        <Field label={t('report.reason')} htmlFor="report-reason">
-          <NativeSelect id="report-reason" value={reportReason} onChange={(e) => setReportReason(e.target.value)}>
-            <option value="drawing">Drawing</option>
-            <option value="chat">Chat</option>
-            <option value="username">Username</option>
-            <option value="room">Room</option>
-          </NativeSelect>
-        </Field>
-        <Field label={t('report.details')} htmlFor="report-detail">
-          <Textarea id="report-detail" value={reportDetail} onChange={(e) => setReportDetail(e.target.value)} placeholder={t('report.placeholder')} />
-        </Field>
+      <Modal open={reportOpen} onClose={() => setReportOpen(false)} title={t('report.title')} footer={<><Button variant="ghost" onClick={() => setReportOpen(false)}>{t('common.cancel')}</Button><Button variant="primary" onClick={() => reportFormRef.current?.requestSubmit()} disabled={reporting || !reportTarget}>{reporting ? 'Sending…' : t('report.submit')}</Button></>}>
+        <form ref={reportFormRef} onSubmit={(event) => void submitReport(event)} className="form-stack">
+          <Field label="Player" htmlFor="report-target"><NativeSelect id="report-target" value={reportTarget} onChange={(event) => setReportTarget(event.target.value)}><option value="">Choose a player</option>{room.players.filter((player) => player.userId !== user.id).map((player) => <option key={player.userId} value={player.userId}>{player.username}</option>)}</NativeSelect></Field>
+          <Field label={t('report.reason')} htmlFor="report-type"><NativeSelect id="report-type" value={reportType} onChange={(event) => setReportType(event.target.value as typeof reportType)}><option value="drawing">Drawing</option><option value="chat">Chat</option><option value="harassment">Harassment</option><option value="cheating">Cheating</option><option value="other">Other</option></NativeSelect></Field>
+          <Field label={t('report.details')} htmlFor="report-details"><Textarea id="report-details" required minLength={5} maxLength={500} value={reportDescription} onChange={(event) => setReportDescription(event.target.value)} placeholder={t('report.placeholder')} /></Field>
+        </form>
       </Modal>
     </div>
   );

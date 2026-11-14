@@ -1,21 +1,20 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Pencil, Plus, Trash2 } from 'lucide-react';
 import type { AdPlacement, AdUnit } from '@/types';
-import { useDb } from '@/hooks/useDb';
 import { useToast } from '@/context/ToastContext';
-import { adminService } from '@/services';
-import { uid } from '@/services/db';
+import { backendAdminService } from '@/services/backendAdmin.service';
 import { Badge, Button, ConfirmDialog, Field, Input, Modal, NativeSelect, Switch, Textarea } from '@/components/ui';
 import { DataTable, type Column } from '@/components/DataTable';
-import { AdminPage, useAdmin } from './shared';
+import { AdminPage } from './shared';
 
 type Device = 'desktop' | 'mobile' | 'tablet';
 const DEVICES: Device[] = ['desktop', 'mobile', 'tablet'];
 
 export default function Ads() {
-  const db = useDb();
-  const { name } = useAdmin();
   const { toast } = useToast();
+  const [ads, setAds] = useState<AdUnit[]>([]);
+  const [error, setError] = useState('');
+  useEffect(() => { void backendAdminService.ads().then(setAds).catch((e: unknown) => setError(e instanceof Error ? e.message : 'Advertisements could not be loaded.')); }, []);
   const [editing, setEditing] = useState<AdUnit | 'new' | null>(null);
   const [deleting, setDeleting] = useState<AdUnit | null>(null);
   const [form, setForm] = useState({
@@ -37,12 +36,12 @@ export default function Ads() {
     setForm((f) => ({ ...f, devices: f.devices.includes(d) ? f.devices.filter((x) => x !== d) : [...f.devices, d] }));
   };
 
-  const save = () => {
+  const save = async () => {
     if (!form.name.trim() || !form.body.trim()) { toast('Name and ad copy are required.', 'error'); return; }
     if (form.devices.length === 0) { toast('Pick at least one device.', 'error'); return; }
     if (form.endDate < form.startDate) { toast('End date must be after the start date.', 'error'); return; }
     const ad: AdUnit = {
-      id: editing === 'new' ? uid('ad') : (editing as AdUnit).id,
+      id: editing === 'new' ? crypto.randomUUID() : (editing as AdUnit).id,
       name: form.name.trim(),
       placement: form.placement,
       enabled: form.enabled,
@@ -52,10 +51,10 @@ export default function Ads() {
       priority: form.priority,
       body: form.body.trim(),
     };
-    adminService.saveAd(ad, name);
-    toast(editing === 'new' ? 'Ad unit created.' : 'Ad unit updated.', 'success');
-    setEditing(null);
+    try { await backendAdminService.saveAd(ad); setAds((current) => editing === 'new' ? [ad, ...current] : current.map((item) => item.id === ad.id ? ad : item)); toast('Ad unit saved. Device targeting is not available in the production schema.', 'success'); setEditing(null); }
+    catch (e) { toast(e instanceof Error ? e.message : 'Ad unit could not be saved.', 'error'); }
   };
+  const toggle = async (ad: AdUnit) => { try { const updated = { ...ad, enabled: !ad.enabled }; await backendAdminService.saveAd(updated); setAds((current) => current.map((item) => item.id === ad.id ? updated : item)); toast(updated.enabled ? 'Ad enabled.' : 'Ad paused.', 'success'); } catch (e) { toast(e instanceof Error ? e.message : 'Ad status could not be changed.', 'error'); } };
 
   const columns: Column<AdUnit>[] = [
     { key: 'name', header: 'Unit', width: '24%', render: (a) => <span className="admin-user-name">{a.name}</span>, sortValue: (a) => a.name },
@@ -65,7 +64,7 @@ export default function Ads() {
     { key: 'priority', header: 'Priority', align: 'end', render: (a) => <span className="mono">{a.priority}</span>, sortValue: (a) => a.priority },
     {
       key: 'enabled', header: 'Live', align: 'center',
-      render: (a) => <Switch checked={a.enabled} onChange={() => { adminService.saveAd({ ...a, enabled: !a.enabled }, name); toast(a.enabled ? 'Ad paused.' : 'Ad enabled.', 'success'); }} label={`Toggle ${a.name}`} />,
+      render: (a) => <Switch checked={a.enabled} onChange={() => void toggle(a)} label={`Toggle ${a.name}`} />,
       sortValue: (a) => (a.enabled ? 1 : 0),
     },
     {
@@ -85,8 +84,9 @@ export default function Ads() {
       sub="Ads appear on the landing page and blog only. The game canvas and rooms never show ads."
       actions={<Button variant="primary" icon={<Plus size={15} />} onClick={() => open('new')}>New ad unit</Button>}
     >
+      {error && <p role="alert" className="muted">{error}</p>}
       <div className="panel">
-        <DataTable columns={columns} rows={db.ads} rowKey={(a) => a.id} searchable
+        <DataTable columns={columns} rows={ads} rowKey={(a) => a.id} searchable
           searchPlaceholder="Search ad units" searchLabel="Search ads" searchValue={(a) => `${a.name} ${a.placement}`}
           emptyTitle="No ad units" />
       </div>
@@ -94,7 +94,7 @@ export default function Ads() {
       <Modal open={Boolean(editing)} onClose={() => setEditing(null)} title={editing === 'new' ? 'New ad unit' : `Edit ${form.name}`} wide
         footer={<>
           <Button variant="ghost" onClick={() => setEditing(null)}>Cancel</Button>
-          <Button variant="primary" onClick={save}>Save ad unit</Button>
+          <Button variant="primary" onClick={() => void save()}>Save ad unit</Button>
         </>}>
         <div className="admin-form-grid">
           <Field label="Name" htmlFor="ad-name" hint="Internal label, not shown to players.">
@@ -142,7 +142,7 @@ export default function Ads() {
 
       <ConfirmDialog
         open={Boolean(deleting)} onClose={() => setDeleting(null)}
-        onConfirm={() => { if (deleting) { adminService.removeAd(deleting.id, name); toast('Ad unit deleted.', 'success'); } }}
+        onConfirm={() => { if (deleting) void backendAdminService.deleteAd(deleting.id).then(() => { setAds((current) => current.filter((ad) => ad.id !== deleting.id)); setDeleting(null); toast('Ad unit deleted.', 'success'); }).catch((e: unknown) => toast(e instanceof Error ? e.message : 'Ad unit could not be deleted.', 'error')); }}
         title="Delete ad unit" body={`Delete "${deleting?.name}"?`}
         confirmLabel="Delete"
       />

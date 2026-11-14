@@ -1,6 +1,6 @@
 import type {
   Achievement, AdUnit, Article, AuditEntry, AvatarDef, Challenge, CrmMessage,
-  GameConfig, LeaderboardEntry, MatchRecord, MediaAsset, PermissionDef, Report,
+  GameConfig, LeaderboardEntry, MediaAsset, PermissionDef, Report,
   RewardEntry, Room, SeoRecord, RedirectRule, SystemSettings, Title, User, Word, XpConfig,
 } from '@/types';
 import { AVATAR_IMAGES, ACHIEVEMENT_IMAGES, TITLE_IMAGES } from './assets';
@@ -128,15 +128,6 @@ export const REWARDS: RewardEntry[] = [
   { id: 'r6', userId: 'u-kai', label: 'Achievement: Level 10', xp: 100, at: '2026-11-05T12:00:00Z', kind: 'achievement' },
   { id: 'r7', userId: 'u-kai', label: 'Correct guess: castle', xp: 15, at: '2026-11-10T21:14:00Z', kind: 'guess' },
   { id: 'r8', userId: 'u-kai', label: 'Match finished, 1st place', xp: 50, at: '2026-11-10T20:52:00Z', kind: 'match' },
-];
-
-export const MATCHES: MatchRecord[] = [
-  { id: 'm1', userId: 'u-kai', roomName: 'Late night sketches', playedAt: '2026-11-11T09:28:00Z', players: 6, placement: 2, score: 640, xpEarned: 132, rounds: 4 },
-  { id: 'm2', userId: 'u-kai', roomName: 'English practice', playedAt: '2026-11-10T20:52:00Z', players: 5, placement: 1, score: 780, xpEarned: 168, rounds: 4 },
-  { id: 'm3', userId: 'u-kai', roomName: 'Quick round', playedAt: '2026-11-10T18:20:00Z', players: 4, placement: 3, score: 410, xpEarned: 88, rounds: 3 },
-  { id: 'm4', userId: 'u-kai', roomName: 'Friends room', playedAt: '2026-11-09T22:05:00Z', players: 8, placement: 1, score: 920, xpEarned: 210, rounds: 5 },
-  { id: 'm5', userId: 'u-kai', roomName: 'After class', playedAt: '2026-11-09T17:44:00Z', players: 5, placement: 4, score: 350, xpEarned: 74, rounds: 4 },
-  { id: 'm6', userId: 'u-kai', roomName: 'Sunday drawings', playedAt: '2026-11-08T15:30:00Z', players: 6, placement: 2, score: 690, xpEarned: 140, rounds: 4 },
 ];
 
 export const LEADERBOARD: LeaderboardEntry[] = [

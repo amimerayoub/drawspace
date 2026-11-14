@@ -4,7 +4,7 @@ import { Pagination, SearchInput } from './ui';
 
 export interface Column<T> {
   key: string;
-  header: string;
+  header: ReactNode;
   render: (row: T) => ReactNode;
   sortValue?: (row: T) => string | number;
   width?: string;

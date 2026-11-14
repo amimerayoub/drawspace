@@ -1,13 +1,14 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, Navigate, useNavigate } from 'react-router-dom';
 import { CalendarDays, Pencil, Trophy } from 'lucide-react';
 import { useI18n } from '@/i18n/I18nContext';
 import { useAuth, fullUser } from '@/context/AuthContext';
-import { useDb } from '@/hooks/useDb';
 import { useToast } from '@/context/ToastContext';
 import { useTheme } from '@/theme/ThemeContext';
 import { useSoundToggle } from '@/hooks/useSound';
-import { authService, levelForXp, progressionService } from '@/services';
+import { authService } from '@/services';
+import { backendProgressionService, type ProgressionSnapshot } from '@/services/backendProgression.service';
+import { matchHistoryService, type MatchHistoryItem, type MatchDetail } from '@/services/matchHistory.service';
 import { LOCALES } from '@/i18n/I18nContext';
 import { Avatar, AvatarPicker } from '@/components/Avatar';
 import { AchievementIcon, TitleIcon } from '@/components/Emblems';
@@ -21,51 +22,65 @@ export default function Profile() {
   const { toast } = useToast();
   const { theme, setTheme } = useTheme();
   const [soundOn, setSoundOn] = useSoundToggle();
-  const dbState = useDb();
   const [tab, setTab] = useState('overview');
+  const [progression, setProgression] = useState<ProgressionSnapshot | null>(null);
+  const [progressionError, setProgressionError] = useState('');
+  const [matches, setMatches] = useState<MatchHistoryItem[]>([]);
+  const [matchesLoading, setMatchesLoading] = useState(true);
+  const [matchesError, setMatchesError] = useState('');
+  const [selectedMatch, setSelectedMatch] = useState<MatchDetail | null>(null);
+  const [matchDetailError, setMatchDetailError] = useState('');
+  useEffect(() => { if (user) void backendProgressionService.getMine().then(setProgression).catch((e: unknown) => setProgressionError(e instanceof Error ? e.message : 'Profile progression could not be loaded.')); }, [user?.id]);
+  useEffect(() => { if (!user) return; setMatchesLoading(true); void matchHistoryService.mine().then(setMatches).catch((e: unknown) => setMatchesError(e instanceof Error ? e.message : 'Match history could not be loaded.')).finally(() => setMatchesLoading(false)); }, [user?.id]);
 
   const full = user ? fullUser(user.id) : undefined;
   const [name, setName] = useState(full?.username ?? '');
   const [bio, setBio] = useState(full?.bio ?? '');
   const [avatarId, setAvatarId] = useState(full?.avatarId ?? 'av-01');
   const [nameError, setNameError] = useState('');
+  const [saving, setSaving] = useState(false);
 
   if (!user || !full) return <Navigate to={path('/play')} replace />;
 
-  const level = levelForXp(full.xp);
-  const title = dbState.titles.find((ti) => ti.id === full.titleId);
-  const matches = progressionService.matches(full.id);
-  const rewards = progressionService.rewards(full.id).slice(0, 6);
-  const achievements = progressionService.achievements();
+  const level = progression?.progression || { level: full.level, totalXP: full.xp, into: 0, needed: 100, equippedTitleId: full.titleId };
+  const title = progression?.titles.find((ti) => ti.id === progression?.progression.equippedTitleId);
+  const rewards = progression?.rewards.slice(0, 6) || [];
+  const achievements = progression?.achievements || [];
   const unlocked = achievements.filter((a) => a.unlockedAt).length;
-  const winRate = full.stats.matches > 0 ? Math.round((full.stats.wins / full.stats.matches) * 100) : 0;
+  const totalGames = progression?.statistics.totalGames ?? full.stats.matches;
+  const wins = progression?.statistics.gamesWon ?? full.stats.wins;
+  const correctGuesses = progression?.statistics.correctGuesses ?? full.stats.correctGuesses;
+  const totalPoints = progression?.statistics.totalPoints ?? full.stats.totalScore;
+  const winRate = progression?.statistics.winRate ?? (totalGames > 0 ? Math.round((wins / totalGames) * 100) : 0);
 
-  const saveProfile = () => {
+  const saveProfile = async () => {
     const clean = name.trim();
     if (clean.length < 3) { setNameError(t('play.nameError')); return; }
-    if (dbState.users.some((u) => u.id !== full.id && u.username.toLowerCase() === clean.toLowerCase())) {
-      setNameError('That username is taken.');
-      return;
-    }
     setNameError('');
-    authService.updateUser(full.id, { username: clean, bio: bio.trim(), avatarId });
-    refresh();
-    toast(t('profile.saved'), 'success');
+    setSaving(true);
+    try {
+      await authService.updateProfile(full.id, { username: clean, bio: bio.trim(), avatarId });
+      await refresh();
+      toast(t('profile.saved'), 'success');
+    } catch (error) {
+      setNameError(error instanceof Error ? error.message : 'Profile could not be saved.');
+    } finally { setSaving(false); }
   };
 
   const stats: { label: string; value: string | number }[] = [
-    { label: t('profile.matches'), value: formatNumber(full.stats.matches) },
-    { label: t('profile.wins'), value: formatNumber(full.stats.wins) },
+    { label: t('profile.matches'), value: formatNumber(totalGames) },
+    { label: t('profile.wins'), value: formatNumber(wins) },
     { label: t('profile.winRate'), value: `${winRate}%` },
-    { label: t('profile.correctGuesses'), value: formatNumber(full.stats.correctGuesses) },
-    { label: t('profile.wordsDrawn'), value: formatNumber(full.stats.wordsDrawn) },
-    { label: t('profile.bestScore'), value: formatNumber(full.stats.bestScore) },
+    { label: t('profile.correctGuesses'), value: formatNumber(correctGuesses) },
+    { label: t('profile.wordsDrawn'), value: '—' },
+    { label: t('profile.bestScore'), value: '—' },
   ];
 
   return (
     <div className="page">
       <SeoHead title={`${t('profile.title')} · DrawSpace`} />
       <div className="container container-narrow">
+        {progressionError && <p role="alert" className="muted">{progressionError}</p>}
         <div className="panel panel-pad profile-card">
           <Avatar avatarId={full.avatarId} size={72} />
           <div className="profile-id">
@@ -81,7 +96,7 @@ export default function Profile() {
             <div className="profile-level">
               <div className="profile-level-meta">
                 <span className="profile-level-badge mono">{t('common.level')} {level.level}</span>
-                <span className="faint mono">{formatNumber(level.into)} / {formatNumber(level.needed)} XP</span>
+                <span className="faint mono">{formatNumber(level.into)} / {formatNumber(level.needed)} XP · {formatNumber(level.totalXP)} XP total</span>
               </div>
               <Progress value={level.into} max={level.needed} label={t('common.xp')} />
             </div>
@@ -137,22 +152,9 @@ export default function Profile() {
             </div>
 
             <h2 className="section-title">{t('common.matchHistory')}</h2>
-            {matches.length === 0 ? (
-              <EmptyState title={t('profile.noMatches')} action={<Link to={path('/lobby')} className="btn btn-primary btn-sm">{t('common.playNow')}</Link>} />
-            ) : (
-              <div className="panel match-list">
-                {matches.map((m) => (
-                  <div key={m.id} className="match-row">
-                    <span className={`match-place mono ${m.placement === 1 ? 'accent' : 'faint'}`}>#{m.placement}</span>
-                    <span className="match-room">{m.roomName}</span>
-                    <span className="faint match-meta">{m.players} {t('common.players')} · {m.rounds} {t('common.rounds')}</span>
-                    <span className="faint match-date">{formatDate(m.playedAt)}</span>
-                    <span className="mono match-score">{m.score}</span>
-                    <span className="mono accent match-xp">+{m.xpEarned}</span>
-                  </div>
-                ))}
-              </div>
-            )}
+            {matchesLoading ? <p className="faint" role="status">Loading match history…</p> : matchesError ? <div className="panel" role="alert"><p>{matchesError}</p><Button onClick={() => { setMatchesError(''); setMatchesLoading(true); void matchHistoryService.mine().then(setMatches).catch((e: unknown) => setMatchesError(e instanceof Error ? e.message : 'Match history could not be loaded.')).finally(() => setMatchesLoading(false)); }}>Retry</Button></div> : matches.length === 0 ? <EmptyState title="No completed matches yet" body="Your completed matches will appear here." action={<Link to={path('/lobby')} className="btn btn-primary btn-sm">{t('common.playNow')}</Link>} /> : <div className="panel reward-list">{matches.map((match) => <button key={match.matchId} type="button" className="reward-row" onClick={() => { setMatchDetailError(''); void matchHistoryService.detail(match.matchId).then(setSelectedMatch).catch((e: unknown) => setMatchDetailError(e instanceof Error ? e.message : 'Match details could not be loaded.')); }}><span className="reward-label">{match.roomName} · {match.isWinner ? 'Winner' : `#${match.placement}`}</span><span className="faint reward-date">{formatDate(match.completedAt)}</span><span className="mono accent">{formatNumber(match.score)}</span></button>)}</div>}
+            {matchDetailError && <p role="alert" className="faint">{matchDetailError}</p>}
+            {selectedMatch && <div className="panel" style={{ padding: 16, marginTop: 12 }}><div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}><h3>{selectedMatch.roomName}</h3><Button onClick={() => setSelectedMatch(null)}>Close</Button></div><p className="faint">{formatDate(selectedMatch.completedAt)} · {Math.floor(selectedMatch.durationSeconds / 60)} min · {selectedMatch.players.length} players</p>{selectedMatch.players.map((player) => <p key={`${player.username}-${player.placement}`}>{player.placement}. {player.username} — {formatNumber(player.score)}{player.isWinner ? ' · Winner' : ''}</p>)}</div>}
 
             <h2 className="section-title">{t('common.rewardHistory')}</h2>
             {rewards.length === 0 ? (
@@ -188,7 +190,7 @@ export default function Profile() {
               <AvatarPicker value={avatarId} onChange={setAvatarId} label={t('common.chooseAvatar')} />
             </Field>
             <div className="form-actions">
-              <Button variant="primary" onClick={saveProfile}>{t('common.save')}</Button>
+              <Button variant="primary" onClick={() => void saveProfile()} loading={saving}>{t('common.save')}</Button>
             </div>
           </div>
         )}

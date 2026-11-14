@@ -1,12 +1,11 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Navigate } from 'react-router-dom';
 import { Check } from 'lucide-react';
 import type { ChallengePeriod } from '@/types';
 import { useI18n } from '@/i18n/I18nContext';
 import { useAuth } from '@/context/AuthContext';
-import { useDb } from '@/hooks/useDb';
 import { useToast } from '@/context/ToastContext';
-import { progressionService } from '@/services';
+import { backendProgressionService, type ProgressionSnapshot } from '@/services/backendProgression.service';
 import { Emblem } from '@/components/Emblems';
 import { REWARD_IMAGES } from '@/data/assets';
 import { Badge, Button, EmptyState, Progress, Tabs } from '@/components/ui';
@@ -16,20 +15,19 @@ export default function Challenges() {
   const { t, path, formatDate } = useI18n();
   const { user, refresh } = useAuth();
   const { toast } = useToast();
-  useDb();
   const [tab, setTab] = useState<ChallengePeriod>('daily');
+  const [snapshot, setSnapshot] = useState<ProgressionSnapshot | null>(null);
+  const [error, setError] = useState('');
+  useEffect(() => { if (user) void backendProgressionService.getMine().then(setSnapshot).catch((e: unknown) => setError(e instanceof Error ? e.message : 'Challenges could not be loaded.')); }, [user?.id]);
 
   if (!user) return <Navigate to={path('/play')} replace />;
 
-  const all = progressionService.challenges();
+  const all = snapshot?.challenges || [];
   const list = all.filter((c) => c.period === tab);
 
-  const claim = (id: string) => {
-    const xp = progressionService.claimChallenge(id, user.id);
-    if (xp > 0) {
-      refresh();
-      toast(t('challenges.claimedToast', { xp }), 'success');
-    }
+  const claim = async (id: string) => {
+    try { const { xp } = await backendProgressionService.claimChallenge(id); setSnapshot(await backendProgressionService.getMine()); await refresh(); toast(t('challenges.claimedToast', { xp }), 'success'); }
+    catch (e) { toast(e instanceof Error ? e.message : 'Challenge could not be claimed.', 'error'); }
   };
 
   return (
@@ -40,6 +38,7 @@ export default function Challenges() {
           <h1 className="page-title">{t('challenges.title')}</h1>
           <p className="page-sub">{t('challenges.sub')}</p>
         </div>
+        {error && <p role="alert" className="muted">{error}</p>}
 
         <Tabs
           label={t('challenges.title')}
@@ -77,7 +76,7 @@ export default function Challenges() {
                     {c.claimed ? (
                       <Badge tone="accent"><Check size={11} /> {t('common.claimed')}</Badge>
                     ) : done ? (
-                      <Button variant="primary" size="sm" onClick={() => claim(c.id)}>{t('common.claim')}</Button>
+                      <Button variant="primary" size="sm" onClick={() => void claim(c.id)}>{t('common.claim')}</Button>
                     ) : (
                       <span className="faint challenge-pct mono">{Math.round((c.progress / c.objective) * 100)}%</span>
                     )}

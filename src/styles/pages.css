@@ -333,7 +333,9 @@
 .blog-card-meta { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); font-size: var(--text-xs); }
 .blog-card-title { font-family: var(--font-display); font-size: var(--text-md); font-weight: 700; line-height: 1.35; }
 .blog-card-excerpt { font-size: var(--text-sm); flex: 1; }
+.blog-card-tags { display: flex; flex-wrap: wrap; gap: 6px; }
 .blog-card-more { font-size: var(--text-xs); font-weight: 600; display: inline-flex; align-items: center; gap: 5px; }
+.blog-filters { margin-bottom: var(--space-3); max-width: 420px; }
 
 /* Article */
 .article-back { display: inline-flex; align-items: center; gap: 6px; font-size: var(--text-sm); margin-bottom: var(--space-4); }

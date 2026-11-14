@@ -278,9 +278,10 @@ interface ConfirmProps {
   body: string;
   confirmLabel?: string;
   cancelLabel?: string;
+  children?: ReactNode;
 }
 
-export function ConfirmDialog({ open, onClose, onConfirm, title, body, confirmLabel = 'Confirm', cancelLabel = 'Cancel' }: ConfirmProps) {
+export function ConfirmDialog({ open, onClose, onConfirm, title, body, confirmLabel = 'Confirm', cancelLabel = 'Cancel', children }: ConfirmProps) {
   return (
     <Modal
       open={open}
@@ -294,6 +295,7 @@ export function ConfirmDialog({ open, onClose, onConfirm, title, body, confirmLa
       }
     >
       <p className="muted">{body}</p>
+      {children}
     </Modal>
   );
 }

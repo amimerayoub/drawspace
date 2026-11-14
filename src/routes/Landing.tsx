@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowRight, ChevronDown, PenLine, MessageSquare, TrendingUp, KeyRound, Users, BookOpen, Target } from 'lucide-react';
 import { useI18n } from '@/i18n/I18nContext';
@@ -7,7 +7,9 @@ import { AdSlot } from '@/components/AdSlot';
 import { Avatar } from '@/components/Avatar';
 import { AchievementIcon } from '@/components/Emblems';
 import { Progress } from '@/components/ui';
-import { authService, progressionService, blogService } from '@/services';
+import { backendProgressionService, type LiveLeaderboardEntry } from '@/services/backendProgression.service';
+import { backendAdminService } from '@/services/backendAdmin.service';
+import type { Achievement, Article } from '@/types';
 import type { DictKey } from '@/i18n/en';
 
 function GamePreview() {
@@ -96,10 +98,15 @@ function Faq() {
 
 export default function Landing() {
   const { t, path, formatDate } = useI18n();
-  const threshold = authService.playerThreshold();
-  const leaders = progressionService.leaderboard().slice(0, 5);
-  const posts = blogService.published().slice(0, 3);
-  const achievements = progressionService.achievements().slice(0, 4);
+  const [leaders, setLeaders] = useState<LiveLeaderboardEntry[]>([]);
+  const [posts, setPosts] = useState<Article[]>([]);
+  const [achievements, setAchievements] = useState<Achievement[]>([]);
+  const [loadError, setLoadError] = useState('');
+  useEffect(() => {
+    void Promise.all([backendProgressionService.leaderboard(), backendAdminService.publicArticles(), backendProgressionService.publicAchievements()])
+      .then(([leaderboard, articles, catalog]) => { setLeaders(leaderboard.slice(0, 5)); setPosts(articles.slice(0, 3)); setAchievements(catalog.slice(0, 4)); })
+      .catch((e: unknown) => setLoadError(e instanceof Error ? e.message : 'Live content could not be loaded.'));
+  }, []);
 
   return (
     <>
@@ -114,7 +121,6 @@ export default function Landing() {
               <Link to={path('/play')} className="btn btn-primary btn-lg">{t('common.playNow')}</Link>
               <Link to={path('/join')} className="btn btn-secondary btn-lg" >{t('common.joinWithCode')}</Link>
             </div>
-            {threshold && <p className="hero-players faint">{t('landing.playersJoined', { count: threshold })}</p>}
           </div>
           <GamePreview />
         </div>
@@ -180,8 +186,8 @@ export default function Landing() {
             <div className="xp-sample-head">
               <Avatar avatarId="av-08" size={40} />
               <div>
-                <p className="xp-sample-name">you</p>
-                <p className="faint xp-sample-title">Guesser</p>
+                <p className="xp-sample-name">Example player</p>
+                <p className="faint xp-sample-title">Illustrative progress</p>
               </div>
               <span className="xp-sample-level mono">{t('common.level')} 12</span>
             </div>
@@ -194,6 +200,7 @@ export default function Landing() {
         </div>
       </section>
 
+      {loadError && <div className="container"><p role="status" className="faint">{loadError}</p></div>}
       <section className="section">
         <div className="container">
           <div className="section-head section-head-row">
@@ -222,7 +229,7 @@ export default function Landing() {
           </div>
           <div className="panel leaders">
             {leaders.map((l) => (
-              <div key={l.userId} className="leader-row">
+              <div key={l.rank} className="leader-row">
                 <span className={`leader-rank mono ${l.rank <= 3 ? 'top' : ''}`}>{l.rank}</span>
                 <Avatar avatarId={l.avatarId} size={32} />
                 <span className="leader-name">{l.username}</span>

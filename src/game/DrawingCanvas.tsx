@@ -17,9 +17,13 @@ const COLORS = [
 interface Props {
   interactive: boolean;
   replayStrokes: Stroke[];
+  onStroke?: (stroke: Stroke) => void;
+  onUndo?: () => void;
+  onRedo?: () => void;
+  onClear?: () => void;
 }
 
-export function DrawingCanvas({ interactive, replayStrokes }: Props) {
+export function DrawingCanvas({ interactive, replayStrokes, onStroke, onUndo, onRedo, onClear }: Props) {
   const { t } = useI18n();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [strokes, setStrokes] = useState<Stroke[]>([]);
@@ -112,9 +116,11 @@ export function DrawingCanvas({ interactive, replayStrokes }: Props) {
     drawingRef.current = false;
     const done = liveRef.current;
     liveRef.current = null;
+    done.id = crypto.randomUUID();
     pastRef.current.push(strokes);
     futureRef.current = [];
     setStrokes((prev) => [...prev, done]);
+    onStroke?.(done);
     syncHistoryFlags();
   };
 
@@ -123,6 +129,7 @@ export function DrawingCanvas({ interactive, replayStrokes }: Props) {
     if (!prev) return;
     futureRef.current.unshift(strokes);
     setStrokes(prev);
+    onUndo?.();
     syncHistoryFlags();
   };
 
@@ -131,6 +138,7 @@ export function DrawingCanvas({ interactive, replayStrokes }: Props) {
     if (!next) return;
     pastRef.current.push(strokes);
     setStrokes(next);
+    onRedo?.();
     syncHistoryFlags();
   };
 
@@ -139,6 +147,7 @@ export function DrawingCanvas({ interactive, replayStrokes }: Props) {
     pastRef.current.push(strokes);
     futureRef.current = [];
     setStrokes([]);
+    onClear?.();
     syncHistoryFlags();
   };
 

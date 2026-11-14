@@ -1,10 +1,9 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Navigate } from 'react-router-dom';
 import { useI18n } from '@/i18n/I18nContext';
-import { useAuth, fullUser } from '@/context/AuthContext';
-import { useDb } from '@/hooks/useDb';
+import { useAuth } from '@/context/AuthContext';
 import { useToast } from '@/context/ToastContext';
-import { progressionService } from '@/services';
+import { backendProgressionService, type ProgressionSnapshot } from '@/services/backendProgression.service';
 import { AchievementIcon, TitleIcon } from '@/components/Emblems';
 import { Badge, Button, EmptyState, Progress, Tabs } from '@/components/ui';
 import { SeoHead } from '@/components/SeoHead';
@@ -13,21 +12,20 @@ export default function Achievements() {
   const { t, path, formatDate } = useI18n();
   const { user, refresh } = useAuth();
   const { toast } = useToast();
-  useDb();
   const [tab, setTab] = useState('achievements');
+  const [snapshot, setSnapshot] = useState<ProgressionSnapshot | null>(null);
+  const [error, setError] = useState('');
+  useEffect(() => { if (user) void backendProgressionService.getMine().then(setSnapshot).catch((e: unknown) => setError(e instanceof Error ? e.message : 'Progression could not be loaded.')); }, [user?.id]);
 
   if (!user) return <Navigate to={path('/play')} replace />;
-  const full = fullUser(user.id);
-
-  const achievements = progressionService.achievements();
-  const titles = progressionService.titles();
-  const rewards = progressionService.rewards(user.id);
+  const achievements = snapshot?.achievements || [];
+  const titles = snapshot?.titles || [];
+  const rewards = snapshot?.rewards || [];
   const unlockedCount = achievements.filter((a) => a.unlockedAt).length;
 
-  const equip = (titleId: string | null) => {
-    progressionService.equipTitle(user.id, titleId);
-    refresh();
-    toast(t('toast.saved'), 'success');
+  const equip = async (titleId: string | null) => {
+    try { await backendProgressionService.equipTitle(titleId); setSnapshot(await backendProgressionService.getMine()); refresh(); toast(t('toast.saved'), 'success'); }
+    catch (e) { toast(e instanceof Error ? e.message : 'Title could not be equipped.', 'error'); }
   };
 
   return (
@@ -38,6 +36,7 @@ export default function Achievements() {
           <h1 className="page-title">{t('achievements.title')}</h1>
           <p className="page-sub">{t('achievements.sub')}</p>
         </div>
+        {error && <p role="alert" className="muted">{error}</p>}
 
         <Tabs
           label={t('achievements.title')}
@@ -89,7 +88,7 @@ export default function Achievements() {
             <p className="muted ach-count">{t('titles.sub')}</p>
             <div className="panel title-list">
               {titles.map((ti) => {
-                const equipped = full?.titleId === ti.id;
+                const equipped = snapshot?.progression.equippedTitleId === ti.id;
                 return (
                   <div key={ti.id} className={`title-row ${ti.unlocked ? '' : 'locked'}`}>
                     <div className="title-info">
@@ -104,9 +103,9 @@ export default function Achievements() {
                     </div>
                     {ti.unlocked && (
                       equipped ? (
-                        <Button size="sm" variant="ghost" onClick={() => equip(null)}>{t('common.cancel')}</Button>
+                          <Button size="sm" variant="ghost" onClick={() => void equip(null)}>{t('common.cancel')}</Button>
                       ) : (
-                        <Button size="sm" onClick={() => equip(ti.id)}>{t('common.equip')}</Button>
+                        <Button size="sm" onClick={() => void equip(ti.id)}>{t('common.equip')}</Button>
                       )
                     )}
                   </div>

@@ -1,30 +1,30 @@
-import { lazy, Suspense } from 'react';
+import { lazy, Suspense, type ReactNode } from 'react';
 import { Navigate, Outlet, Route, Routes } from 'react-router-dom';
-import { I18nProvider, LOCALES, DEFAULT_LOCALE } from '@/i18n/I18nContext';
+import { I18nProvider, LOCALES, DEFAULT_LOCALE, useI18n } from '@/i18n/I18nContext';
 import type { Locale } from '@/types';
+import { useAuth } from '@/context/AuthContext';
 import { Header } from '@/components/Header';
 import { Footer } from '@/components/Footer';
 import { Spinner } from '@/components/ui';
-import Landing from '@/routes/Landing';
-import Play from '@/routes/Play';
-import Lobby from '@/routes/Lobby';
-import CreateRoom from '@/routes/CreateRoom';
-import JoinRoom from '@/routes/JoinRoom';
-import WaitingRoom from '@/routes/WaitingRoom';
-import GameRoom from '@/routes/GameRoom';
-import Results from '@/routes/Results';
-import Leaderboard from '@/routes/Leaderboard';
-import Blog from '@/routes/Blog';
-import BlogArticle from '@/routes/BlogArticle';
-import Rules from '@/routes/Rules';
-import Legal from '@/routes/Legal';
-import SignIn from '@/routes/SignIn';
-import SignUp from '@/routes/SignUp';
-import Profile from '@/routes/Profile';
-import Achievements from '@/routes/Achievements';
-import Challenges from '@/routes/Challenges';
-import NotFound from '@/routes/NotFound';
-
+const Landing = lazy(() => import('@/routes/Landing'));
+const Play = lazy(() => import('@/routes/Play'));
+const Lobby = lazy(() => import('@/routes/Lobby'));
+const CreateRoom = lazy(() => import('@/routes/CreateRoom'));
+const JoinRoom = lazy(() => import('@/routes/JoinRoom'));
+const WaitingRoom = lazy(() => import('@/routes/WaitingRoom'));
+const GameRoom = lazy(() => import('@/routes/GameRoom'));
+const Results = lazy(() => import('@/routes/Results'));
+const Leaderboard = lazy(() => import('@/routes/Leaderboard'));
+const Blog = lazy(() => import('@/routes/Blog'));
+const BlogArticle = lazy(() => import('@/routes/BlogArticle'));
+const Rules = lazy(() => import('@/routes/Rules'));
+const Legal = lazy(() => import('@/routes/Legal'));
+const SignIn = lazy(() => import('@/routes/SignIn'));
+const SignUp = lazy(() => import('@/routes/SignUp'));
+const Profile = lazy(() => import('@/routes/Profile'));
+const Achievements = lazy(() => import('@/routes/Achievements'));
+const Challenges = lazy(() => import('@/routes/Challenges'));
+const NotFound = lazy(() => import('@/routes/NotFound'));
 const AdminApp = lazy(() => import('@/routes/admin/AdminApp'));
 
 function LocaleLayout({ locale }: { locale: Locale }) {
@@ -48,6 +48,16 @@ function PublicLayout() {
   );
 }
 
+// Wait for the session to resolve before gating, so a cold-loaded deep link
+// (e.g. refreshing /room/CODE) is not bounced to /play while auth is loading.
+function RequireAuth({ children }: { children: ReactNode }) {
+  const { user, ready } = useAuth();
+  const { path } = useI18n();
+  if (!ready) return <div className="page"><Spinner /></div>;
+  if (!user) return <Navigate to={path('/play')} replace />;
+  return <>{children}</>;
+}
+
 // Static locale prefixes keep /:locale/<section> from outranking /admin/* for
 // shared names like blog, achievements, and challenges.
 const siteRoutes = (
@@ -55,12 +65,12 @@ const siteRoutes = (
     <Route element={<PublicLayout />}>
       <Route index element={<Landing />} />
       <Route path="play" element={<Play />} />
-      <Route path="lobby" element={<Lobby />} />
-      <Route path="create" element={<CreateRoom />} />
-      <Route path="join" element={<JoinRoom />} />
-      <Route path="join/:code" element={<JoinRoom />} />
-      <Route path="room/:code" element={<WaitingRoom />} />
-      <Route path="results/:code" element={<Results />} />
+      <Route path="lobby" element={<RequireAuth><Lobby /></RequireAuth>} />
+      <Route path="create" element={<RequireAuth><CreateRoom /></RequireAuth>} />
+      <Route path="join" element={<RequireAuth><JoinRoom /></RequireAuth>} />
+      <Route path="join/:code" element={<RequireAuth><JoinRoom /></RequireAuth>} />
+      <Route path="room/:code" element={<RequireAuth><WaitingRoom /></RequireAuth>} />
+      <Route path="results/:code" element={<RequireAuth><Results /></RequireAuth>} />
       <Route path="leaderboard" element={<Leaderboard />} />
       <Route path="blog" element={<Blog />} />
       <Route path="blog/:slug" element={<BlogArticle />} />
@@ -69,17 +79,18 @@ const siteRoutes = (
       <Route path="privacy" element={<Legal kind="privacy" />} />
       <Route path="sign-in" element={<SignIn />} />
       <Route path="sign-up" element={<SignUp />} />
-      <Route path="profile" element={<Profile />} />
-      <Route path="achievements" element={<Achievements />} />
-      <Route path="challenges" element={<Challenges />} />
+      <Route path="profile" element={<RequireAuth><Profile /></RequireAuth>} />
+      <Route path="achievements" element={<RequireAuth><Achievements /></RequireAuth>} />
+      <Route path="challenges" element={<RequireAuth><Challenges /></RequireAuth>} />
       <Route path="*" element={<NotFound />} />
     </Route>
-    <Route path="game/:code" element={<GameRoom />} />
+    <Route path="game/:code" element={<RequireAuth><GameRoom /></RequireAuth>} />
   </>
 );
 
 export default function App() {
   return (
+    <Suspense fallback={<div className="page"><Spinner /></div>}>
     <Routes>
       <Route path="/" element={<Navigate to={`/${DEFAULT_LOCALE}`} replace />} />
       <Route
@@ -97,5 +108,6 @@ export default function App() {
       ))}
       <Route path="*" element={<Navigate to={`/${DEFAULT_LOCALE}`} replace />} />
     </Routes>
+    </Suspense>
   );
 }

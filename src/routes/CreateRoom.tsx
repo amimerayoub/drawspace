@@ -3,7 +3,7 @@ import { Navigate, useNavigate } from 'react-router-dom';
 import { useI18n } from '@/i18n/I18nContext';
 import { useAuth } from '@/context/AuthContext';
 import { useToast } from '@/context/ToastContext';
-import { roomService, db } from '@/services';
+import { socketClient } from '@/services/socketClient';
 import { SeoHead } from '@/components/SeoHead';
 import { Button, Field, Input, NativeSelect, Segmented, Textarea } from '@/components/ui';
 import type { Difficulty, RoomVisibility } from '@/types';
@@ -13,7 +13,7 @@ export default function CreateRoom() {
   const { user } = useAuth();
   const { toast } = useToast();
   const navigate = useNavigate();
-  const cfg = db.gameConfig;
+  const cfg = { defaultRounds: 3, minRoundSeconds: 30, maxRoundSeconds: 180 };
 
   const [name, setName] = useState('');
   const [visibility, setVisibility] = useState<RoomVisibility>('public');
@@ -25,30 +25,28 @@ export default function CreateRoom() {
   const [wordMode, setWordMode] = useState<'all' | 'easy' | 'medium' | 'hard' | 'custom'>('all');
   const [customWords, setCustomWords] = useState('');
   const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
 
   if (!user) return <Navigate to={path('/play')} replace />;
 
-  const submit = () => {
+  const submit = async () => {
     if (visibility === 'private' && password.trim().length > 0 && password.trim().length < 4) {
       setError(t('create.passwordHint'));
       return;
     }
-    const room = roomService.create(
-      {
-        name,
-        visibility,
-        password: password.trim(),
-        maxPlayers,
-        rounds,
-        roundSeconds,
-        difficulty: difficulty === 'mixed' ? 'medium' : difficulty,
-        wordMode,
-        customWords: customWords.split('\n').map((w) => w.trim().toLowerCase()).filter(Boolean),
-      },
-      user,
-    );
-    toast(t('create.created'), 'success');
-    navigate(path(`/room/${room.code}`));
+    setBusy(true);
+    setError('');
+    try {
+      const room = await socketClient.request<{ code: string }>('room:create', {
+        name, visibility, password: visibility === 'private' ? password.trim() || undefined : undefined,
+        maxPlayers, rounds, roundSeconds, difficulty, wordMode,
+        customWords: wordMode === 'custom' ? customWords.split('\n').map((word) => word.trim()).filter(Boolean) : [],
+      });
+      toast(t('create.created'), 'success');
+      navigate(path(`/room/${room.code}`));
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+    } finally { setBusy(false); }
   };
 
   return (
@@ -147,7 +145,7 @@ export default function CreateRoom() {
 
           <div className="form-actions">
             <Button variant="ghost" onClick={() => navigate(path('/play'))}>{t('common.cancel')}</Button>
-            <Button variant="primary" onClick={submit}>{t('common.createRoom')}</Button>
+            <Button variant="primary" onClick={() => void submit()} loading={busy}>{t('common.createRoom')}</Button>
           </div>
         </div>
       </div>

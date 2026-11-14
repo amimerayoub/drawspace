@@ -1,0 +1,8 @@
+word,language,category,difficulty,hint,active
+Cat,en,Animals,easy,,true
+Elephant,en,Animals,medium,,true
+Mountain,en,Nature,hard,,true
+Apple,en,Food,easy,,true
+Computer,en,Technology,medium,,true
+papillon,fr,Animaux,easy,"Insecte aux ailes colorées, léger",true
+قطة,ar,حيوانات,easy,حيوان أليف,true

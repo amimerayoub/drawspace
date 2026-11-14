@@ -1,0 +1,30 @@
+{
+  "format": "drawspace-blogs",
+  "version": 1,
+  "blogs": [
+    {
+      "title": "Five warm-up games before your first match",
+      "slug": "five-warm-up-games",
+      "excerpt": "Loosen up your drawing hand and your guessing brain with five quick exercises you can do in under a minute each.",
+      "content": "New players often freeze when the canvas opens. The fix is not talent, it is routine. These five warm-ups take less than a minute each and make your first round feel familiar.\n\nStart with blind contour drawing: pick an object near you and draw it without looking at the canvas. The result will look terrible, and that is the point. You are training observation, not perfection.\n\nNext, play the shape game. Draw a circle, a triangle, and a square, then turn each one into a recognizable object in under ten seconds. Players who think in shapes guess faster and draw clearer.\n\nThird, practice silent guessing. Look at a friend's drawing and write down three candidate words before saying anything. Narrowing candidates early is the single biggest scoring habit in DrawSpace.\n\nFourth, rehearse your stroke order. Simple subjects read better when you draw the largest shape first and details last. Try a house, a tree, and a face in that order.\n\nFinally, run one practice round with friends before joining a public room. Warm hands, calm guesses, and a familiar canvas beat raw skill every time.",
+      "category": "Tips & Guides",
+      "tags": ["tips", "beginners", "drawing"],
+      "status": "draft",
+      "cover": "learn",
+      "seoTitle": "Five warm-up games for new DrawSpace players",
+      "seoDescription": "Five one-minute exercises that improve drawing clarity and guessing speed before your first DrawSpace match."
+    },
+    {
+      "title": "Comment bien débuter sur DrawSpace",
+      "slug": "comment-bien-debuter",
+      "excerpt": "Un guide court pour comprendre les manches, le score et les bonnes habitudes de dessin dès votre première partie.",
+      "content": "DrawSpace se joue en manches courtes : un joueur dessine, les autres devinent. Plus une bonne réponse arrive tôt, plus elle rapporte de points.\n\nCommencez par des sujets simples. Un chat, une maison ou une pomme se lisent en quelques traits. Ajoutez les détails seulement une fois la forme principale posée.\n\nCôté devinette, tapez des mots courts et précis. Les accents et la casse sont ignorés : « éléphant » et « elephant » sont tous deux acceptés. Relisez le tableau des scores pour repérer les joueurs rapides et observez leur style.\n\nEnfin, jouez régulièrement. Dix minutes par jour valent mieux qu'une longue session par semaine : le vocabulaire visuel se construit par répétition.",
+      "category": "Guides",
+      "tags": ["débutants", "français"],
+      "status": "draft",
+      "cover": "guess",
+      "seoTitle": "Bien débuter sur DrawSpace : le guide essentiel",
+      "seoDescription": "Comprendre les manches, le score et les habitudes de dessin qui font gagner dès la première partie de DrawSpace."
+    }
+  ]
+}

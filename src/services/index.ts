@@ -1,11 +1,21 @@
 import { db, commit, uid } from './db';
+import { backendAuthService } from './backendAuth.service';
 import { BOT_PLAYERS, TOTAL_REGISTERED } from '@/data/mock';
 import type {
-  Achievement, AdUnit, Article, Challenge, CrmMessage, Locale, MatchRecord, RedirectRule, Report, RewardEntry,
+  Achievement, AdUnit, Article, Challenge, CrmMessage, Locale, RedirectRule, Report, RewardEntry,
   Room, RoomPlayer, RoomSettings, SeoRecord, Title, User, Word,
 } from '@/types';
 
 const delay = (ms = 120) => new Promise((r) => setTimeout(r, ms));
+
+function cacheSessionUser(user: User | null) {
+  if (!user) return null;
+  const existing = db.users.find((item) => item.id === user.id);
+  if (existing) Object.assign(existing, user);
+  else db.users.push(user);
+  commit();
+  return user;
+}
 
 function audit(admin: string, action: string, target: string, before: string, after: string, status: 'success' | 'failed' = 'success') {
   db.audit.unshift({ id: uid('au'), admin, action, target, at: new Date().toISOString(), before, after, status });
@@ -15,39 +25,48 @@ function audit(admin: string, action: string, target: string, before: string, af
 
 export const authService = {
   async signIn(identifier: string, password: string): Promise<User> {
-    await delay(250);
-    const user = db.users.find(
-      (u) => u.email?.toLowerCase() === identifier.toLowerCase() || u.username.toLowerCase() === identifier.toLowerCase(),
-    );
-    if (!user) throw new Error('No account found with that email or username.');
-    if (password.length < 4) throw new Error('Password must be at least 4 characters.');
-    if (user.status === 'banned') throw new Error('This account has been banned.');
-    if (user.status === 'suspended') throw new Error('This account is suspended. Contact support.');
-    user.lastSeenAt = new Date().toISOString();
+    const user = await backendAuthService.signIn(identifier, password);
+    const local = db.users.find((item) => item.id === user.id);
+    if (local) Object.assign(local, user);
+    else db.users.push(user);
     commit();
     return user;
   },
 
   async signUp(username: string, email: string, password: string): Promise<User> {
-    await delay(250);
-    if (!db.settings.registrationOpen) throw new Error('Registration is currently closed.');
-    if (username.trim().length < 3) throw new Error('Username must be at least 3 characters.');
-    if (db.users.some((u) => u.username.toLowerCase() === username.toLowerCase())) throw new Error('That username is taken.');
-    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) throw new Error('Enter a valid email address.');
-    if (db.users.some((u) => u.email?.toLowerCase() === email.toLowerCase())) throw new Error('That email is already registered.');
-    if (password.length < 8) throw new Error('Password must be at least 8 characters.');
-    const user: User = {
-      id: uid('u'), username: username.trim(), email, avatarId: db.avatars.find((a) => a.isDefault)?.id ?? 'av-01',
-      bio: '', role: 'player', status: 'active', level: 1, xp: 0, titleId: null,
-      createdAt: new Date().toISOString(), lastSeenAt: new Date().toISOString(),
-      stats: { matches: 0, wins: 0, correctGuesses: 0, wordsDrawn: 0, totalScore: 0, bestScore: 0 },
-      locale: 'en-US',
-    };
+    const user = await backendAuthService.signUp(username, email, password);
     db.users.push(user);
     audit(user.username, 'user.register', user.username, '', 'player');
     commit();
     return user;
   },
+
+  async continueAsGuest(username: string, avatarId: string): Promise<User> {
+    const user = await backendAuthService.continueAsGuest(username, avatarId);
+    const existing = db.users.find((item) => item.id === user.id);
+    if (existing) Object.assign(existing, user);
+    else db.users.push(user);
+    commit();
+    return user;
+  },
+
+  async getCurrentSessionUser() { return cacheSessionUser(await backendAuthService.getCurrentSessionUser()); },
+
+  async signOut() { await backendAuthService.signOut(); },
+
+  async updateProfile(id: string, patch: Partial<User>) {
+    const updated = await backendAuthService.updateProfile(id, {
+      username: patch.username,
+      bio: patch.bio,
+      avatarId: patch.avatarId,
+    });
+    const local = db.users.find((item) => item.id === id);
+    if (local) Object.assign(local, { username: updated.username, bio: updated.bio, avatarId: updated.avatarId });
+    commit();
+    return local;
+  },
+
+  localUser(id: string) { return db.users.find((item) => item.id === id); },
 
   updateUser(id: string, patch: Partial<User>) {
     const user = db.users.find((u) => u.id === id);
@@ -238,9 +257,6 @@ export const progressionService = {
   rewards(userId?: string): RewardEntry[] {
     return userId ? db.rewards.filter((r) => r.userId === userId) : db.rewards;
   },
-  matches(userId?: string): MatchRecord[] {
-    return userId ? db.matches.filter((m) => m.userId === userId) : db.matches;
-  },
   leaderboard() {
     return db.leaderboard;
   },
@@ -267,17 +283,6 @@ export const progressionService = {
     user.level = levelForXp(user.xp).level;
     db.rewards.unshift({ id: uid('r'), userId, label, xp: amount, at: new Date().toISOString(), kind });
     commit();
-  },
-
-  recordMatch(userId: string, record: Omit<MatchRecord, 'id' | 'userId'>) {
-    const user = db.users.find((u) => u.id === userId);
-    if (!user) return;
-    db.matches.unshift({ ...record, id: uid('m'), userId });
-    user.stats.matches += 1;
-    if (record.placement === 1) user.stats.wins += 1;
-    user.stats.totalScore += record.score;
-    user.stats.bestScore = Math.max(user.stats.bestScore, record.score);
-    this.grantXp(userId, record.xpEarned, `Match finished, place ${record.placement}`, 'match');
   },
 
   equipTitle(userId: string, titleId: string | null) {

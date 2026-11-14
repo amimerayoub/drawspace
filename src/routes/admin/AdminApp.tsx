@@ -1,38 +1,38 @@
-import { useState } from 'react';
+import { lazy, useState } from 'react';
 import { Link, Navigate, NavLink, Route, Routes } from 'react-router-dom';
 import {
   BarChart3, BookOpen, CalendarDays, ClipboardList, Cog, FileText, Flag, Gamepad2, Globe, Image,
-  LayoutDashboard, Lock, Megaphone, Menu, MessageSquare, Palette, ScrollText, Shield, Shapes,
+  KeyRound, LayoutDashboard, Lock, Megaphone, Menu, MessageSquare, Palette, ScrollText, Shield, Shapes,
   Sparkles, Trophy, Users, X, type LucideIcon,
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { useTheme } from '@/theme/ThemeContext';
-import { useDb } from '@/hooks/useDb';
-import { db } from '@/services';
 import { Avatar } from '@/components/Avatar';
 import { BRAND } from '@/data/assets';
 import { Badge, Button, IconButton } from '@/components/ui';
 import { NoAccess, useAdmin } from './shared';
-import Overview from './Overview';
-import UsersAdmin from './Users';
-import Roles from './Roles';
-import Rooms from './Rooms';
-import Words from './Words';
-import GameConfig from './GameConfig';
-import Crm from './Crm';
-import Avatars from './Avatars';
-import Titles from './Titles';
-import AchievementsAdmin from './AchievementsAdmin';
-import ChallengesAdmin from './ChallengesAdmin';
-import XpConfig from './XpConfig';
-import BlogAdmin from './BlogAdmin';
-import Seo from './Seo';
-import Ads from './Ads';
-import Media from './Media';
-import Analytics from './Analytics';
-import Moderation from './Moderation';
-import Audit from './Audit';
-import Settings from './Settings';
+const Overview = lazy(() => import('./Overview'));
+const UsersAdmin = lazy(() => import('./Users'));
+const Roles = lazy(() => import('./Roles'));
+const Rooms = lazy(() => import('./Rooms'));
+const Words = lazy(() => import('./Words'));
+const GameConfig = lazy(() => import('./GameConfig'));
+const Crm = lazy(() => import('./Crm'));
+const Avatars = lazy(() => import('./Avatars'));
+const Titles = lazy(() => import('./Titles'));
+const AchievementsAdmin = lazy(() => import('./AchievementsAdmin'));
+const ChallengesAdmin = lazy(() => import('./ChallengesAdmin'));
+const XpConfig = lazy(() => import('./XpConfig'));
+const BlogAdmin = lazy(() => import('./BlogAdmin'));
+const Seo = lazy(() => import('./Seo'));
+const Ads = lazy(() => import('./Ads'));
+const Media = lazy(() => import('./Media'));
+const Analytics = lazy(() => import('./Analytics'));
+const Moderation = lazy(() => import('./Moderation'));
+const Audit = lazy(() => import('./Audit'));
+const Matches = lazy(() => import('./Matches'));
+const Settings = lazy(() => import('./Settings'));
+const McpAdmin = lazy(() => import('./McpAdmin'));
 
 interface NavItem { to: string; label: string; icon: LucideIcon; perm?: string; end?: boolean }
 interface NavGroup { label: string; items: NavItem[] }
@@ -79,7 +79,9 @@ const NAV: NavGroup[] = [
     label: 'Operations',
     items: [
       { to: '/admin/analytics', label: 'Analytics', icon: BarChart3, perm: 'analytics.view' },
+      { to: '/admin/matches', label: 'Match inspection', icon: Trophy, perm: 'matches.inspect' },
       { to: '/admin/audit', label: 'Audit logs', icon: ClipboardList, perm: 'audit.view' },
+      { to: '/admin/mcp', label: 'MCP server', icon: KeyRound, perm: 'settings.manage' },
       { to: '/admin/settings', label: 'System settings', icon: Palette, perm: 'settings.manage' },
     ],
   },
@@ -96,7 +98,6 @@ export default function AdminApp() {
   const { theme, toggle } = useTheme();
   const { isStaff, name, role } = useAdmin();
   const [menuOpen, setMenuOpen] = useState(false);
-  useDb();
 
   if (!user || !isStaff) {
     return (
@@ -104,7 +105,7 @@ export default function AdminApp() {
         <div className="panel panel-pad admin-gate-card">
           <Lock size={22} className="accent" aria-hidden />
           <h1 className="admin-title">Admin console</h1>
-          <p className="muted">Sign in with a staff account to continue. Demo: username admin, any password of 4+ characters.</p>
+          <p className="muted">Sign in with an account assigned an active staff role to continue.</p>
           <div className="admin-gate-actions">
             <Link to="/en-US/sign-in" className="btn btn-primary">Sign in</Link>
             <Link to="/en-US" className="btn btn-ghost">Back to site</Link>
@@ -114,7 +115,12 @@ export default function AdminApp() {
     );
   }
 
-  const visibleNav = NAV.map((g) => ({ ...g, items: g.items.filter((i) => !i.perm || (db.rolePermissions[role] ?? []).includes(i.perm)) }))
+  const rolePermissions: Record<string, string[]> = {
+    superadmin: ['*'], admin: ['*'], moderator: ['users.view', 'moderation.handle', 'rooms.view', 'audit.view'],
+    content_manager: ['words.manage', 'content.blog', 'content.ads', 'content.media'], analyst: ['analytics.view', 'audit.view'], support: ['analytics.view', 'audit.view'],
+  };
+  const permissions = rolePermissions[role] ?? [];
+  const visibleNav = NAV.map((g) => ({ ...g, items: g.items.filter((i) => !i.perm || permissions.includes('*') || permissions.includes(i.perm)) }))
     .filter((g) => g.items.length > 0);
 
   return (
@@ -189,6 +195,8 @@ export default function AdminApp() {
             <Route path="analytics" element={<Gate perm="analytics.view"><Analytics /></Gate>} />
             <Route path="moderation" element={<Gate perm="moderation.handle"><Moderation /></Gate>} />
             <Route path="audit" element={<Gate perm="audit.view"><Audit /></Gate>} />
+            <Route path="mcp" element={<Gate perm="settings.manage"><McpAdmin /></Gate>} />
+            <Route path="matches" element={<Gate perm="matches.inspect"><Matches /></Gate>} />
             <Route path="settings" element={<Gate perm="settings.manage"><Settings /></Gate>} />
             <Route path="*" element={<Navigate to="/admin" replace />} />
           </Routes>

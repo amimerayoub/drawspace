@@ -6,24 +6,27 @@ import { useAuth } from '@/context/AuthContext';
 import { SeoHead } from '@/components/SeoHead';
 import { Avatar, AvatarPicker } from '@/components/Avatar';
 import { Button, Field, Input } from '@/components/ui';
-import { db } from '@/services';
 
 export default function Play() {
   const { t, path } = useI18n();
   const { user, continueAsGuest } = useAuth();
   const navigate = useNavigate();
   const [name, setName] = useState('');
-  const [avatarId, setAvatarId] = useState(db.avatars.find((a) => a.isDefault)?.id ?? 'av-01');
+  const [avatarId, setAvatarId] = useState('av-01');
   const [code, setCode] = useState('');
   const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
 
-  const start = () => {
+  const start = async () => {
     if (name.trim().length < 3) {
       setError(t('play.nameError'));
       return;
     }
-    continueAsGuest(name.trim(), avatarId);
     setError('');
+    setBusy(true);
+    try { await continueAsGuest(name.trim(), avatarId); }
+    catch (cause) { setError(cause instanceof Error ? cause.message : String(cause)); }
+    finally { setBusy(false); }
   };
 
   return (
@@ -60,7 +63,7 @@ export default function Play() {
             <Field label={t('common.chooseAvatar')}>
               <AvatarPicker value={avatarId} onChange={setAvatarId} label={t('common.chooseAvatar')} />
             </Field>
-            <Button variant="primary" onClick={start} className="guest-continue">{t('common.continue')}</Button>
+            <Button variant="primary" onClick={() => void start()} loading={busy} className="guest-continue">{t('common.continue')}</Button>
           </div>
         )}
 

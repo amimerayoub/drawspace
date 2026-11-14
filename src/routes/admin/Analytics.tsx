@@ -2,6 +2,7 @@ import { Activity, Clock, Gamepad2, Users } from 'lucide-react';
 import { ANALYTICS } from '@/data/mock';
 import { BarChart, Donut, LineChart } from '@/components/charts';
 import { AdminPage, StatCard } from './shared';
+import { UnavailableFeature } from './UnavailableFeature';
 
 const DAY_LABELS = ['Oct 29', 'Nov 11'];
 
@@ -15,6 +16,7 @@ function recentDayLabels(count: number): string[] {
 }
 
 export default function Analytics() {
+  return <UnavailableFeature title="Analytics" explanation="No production event analytics or aggregate reporting API is connected. Demo charts are disabled." />;
   const lastDau = ANALYTICS.dau[ANALYTICS.dau.length - 1];
   const lastMatches = ANALYTICS.matches[ANALYTICS.matches.length - 1];
   const weekLabels = recentDayLabels(7);

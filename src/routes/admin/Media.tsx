@@ -6,6 +6,7 @@ import { useToast } from '@/context/ToastContext';
 import { adminService } from '@/services';
 import { Badge, Button, ConfirmDialog, Field, IconButton, Input, Modal, SearchInput } from '@/components/ui';
 import { AdminPage, useAdmin } from './shared';
+import { UnavailableFeature } from './UnavailableFeature';
 
 const KIND_ICON = { image: ImageIcon, avatar: Shapes, document: FileText } as const;
 
@@ -15,6 +16,7 @@ function formatSize(bytes: number) {
 }
 
 export default function Media() {
+  return <UnavailableFeature title="Media library" explanation="No production media table or Appwrite Storage integration is connected. Demo uploads and deletions are disabled." />;
   const db = useDb();
   const { name } = useAdmin();
   const { toast } = useToast();

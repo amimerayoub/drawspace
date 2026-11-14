@@ -1,0 +1,2111 @@
+{
+  "inspectedAt": "2026-11-13T21:32:23.929Z",
+  "endpoint": "https://fra.cloud.appwrite.io/v1",
+  "projectId": "your_appwrite_project_id",
+  "databaseId": "drawspace_db",
+  "total": 24,
+  "tables": [
+    {
+      "id": "profiles",
+      "name": "Profiles",
+      "enabled": true,
+      "rowSecurity": true,
+      "permissions": [
+        "create(\"users\")",
+        "read(\"any\")"
+      ],
+      "columns": [
+        {
+          "key": "accountType",
+          "type": "string",
+          "required": false,
+          "array": false,
+          "size": 16
+        },
+        {
+          "key": "avatarId",
+          "type": "string",
+          "required": false,
+          "array": false,
+          "size": 32
+        },
+        {
+          "key": "bio",
+          "type": "string",
+          "required": false,
+          "array": false,
+          "size": 500
+        },
+        {
+          "key": "createdAt",
+          "type": "string",
+          "required": true,
+          "array": false,
+          "size": 64
+        },
+        {
+          "key": "displayName",
+          "type": "string",
+          "required": false,
+          "array": false,
+          "size": 64
+        },
+        {
+          "key": "normalizedUsername",
+          "type": "string",
+          "required": true,
+          "array": false,
+          "size": 32
+        },
+        {
+          "key": "updatedAt",
+          "type": "string",
+          "required": true,
+          "array": false,
+          "size": 64
+        },
+        {
+          "key": "userId",
+          "type": "string",
+          "required": true,
+          "array": false,
+          "size": 36
+        },
+        {
+          "key": "username",
+          "type": "string",
+          "required": true,
+          "array": false,
+          "size": 32
+        }
+      ],
+      "indexes": [
+        {
+          "key": "idx_normalizedUsername",
+          "type": "unique",
+          "columns": [
+            "normalizedUsername"
+          ],
+          "orders": []
+        },
+        {
+          "key": "idx_userId",
+          "type": "unique",
+          "columns": [
+            "userId"
+          ],
+          "orders": []
+        }
+      ],
+      "rowsInspected": 1,
+      "rowPermissionPatterns": [
+        "delete(\"user:<owner>\")",
+        "read(\"any\")",
+        "update(\"user:<owner>\")"
+      ],
+      "rowPermissionTemplates": [
+        [
+          "delete(\"user:<owner>\")",
+          "read(\"any\")",
+          "update(\"user:<owner>\")"
+        ]
+      ]
+    },
+    {
+      "id": "avatars",
+      "name": "Avatars",
+      "enabled": true,
+      "rowSecurity": false,
+      "permissions": [
+        "read(\"any\")"
+      ],
+      "columns": [
+        {
+          "key": "assetPath",
+          "type": "string",
+          "required": false,
+          "array": false,
+          "size": 255
+        },
+        {
+          "key": "avatarId",
+          "type": "string",
+          "required": true,
+          "array": false,
+          "size": 32
+        },
+        {
+          "key": "category",
+          "type": "string",
+          "required": false,
+          "array": false,
+          "size": 32
+        },
+        {
+          "key": "isActive",
+          "type": "boolean",
+          "required": false,
+          "array": false
+        },
+        {
+          "key": "name",
+          "type": "string",
+          "required": true,
+          "array": false,
+          "size": 64
+        },
+        {
+          "key": "sortOrder",
+          "type": "integer",
+          "required": false,
+          "array": false,
+          "min": "0",
+          "max": "1000"
+        }
+      ],
+      "indexes": [
+        {
+          "key": "idx_avatarId",
+          "type": "unique",
+          "columns": [
+            "avatarId"
+          ],
+          "orders": []
+        }
+      ],
+      "rowsInspected": 12,
+      "rowPermissionPatterns": [],
+      "rowPermissionTemplates": [
+        []
+      ]
+    },
+    {
+      "id": "user_preferences",
+      "name": "User Preferences",
+      "enabled": true,
+      "rowSecurity": true,
+      "permissions": [
+        "create(\"users\")"
+      ],
+      "columns": [
+        {
+          "key": "language",
+          "type": "string",
+          "required": false,
+          "array": false,
+          "size": 16
+        },
+        {
+          "key": "notificationPreferences",
+          "type": "string",
+          "required": false,
+          "array": false,
+          "size": 2000
+        },
+        {
+          "key": "privacySettings",
+          "type": "string",
+          "required": false,
+          "array": false,
+          "size": 2000
+        },
+        {
+          "key": "soundEnabled",
+          "type": "boolean",
+          "required": false,
+          "array": false
+        },
+        {
+          "key": "theme",
+          "type": "string",
+          "required": false,
+          "array": false,
+          "size": 16
+        },
+        {
+          "key": "updatedAt",
+          "type": "string",
+          "required": true,
+          "array": false,
+          "size": 64
+        },
+        {
+          "key": "userId",
+          "type": "string",
+          "required": true,
+          "array": false,
+          "size": 36
+        }
+      ],
+      "indexes": [
+        {
+          "key": "idx_userId",
+          "type": "unique",
+          "columns": [
+            "userId"
+          ],
+          "orders": []
+        }
+      ],
+      "rowsInspected": 1,
+      "rowPermissionPatterns": [
+        "read(\"user:<owner>\")",
+        "update(\"user:<owner>\")"
+      ],
+      "rowPermissionTemplates": [
+        [
+          "read(\"user:<owner>\")",
+          "update(\"user:<owner>\")"
+        ]
+      ]
+    },
+    {
+      "id": "user_statistics",
+      "name": "User Statistics",
+      "enabled": true,
+      "rowSecurity": true,
+      "permissions": [
+        "create(\"users\")",
+        "read(\"any\")"
+      ],
+      "columns": [
+        {
+          "key": "correctGuesses",
+          "type": "integer",
+          "required": false,
+          "array": false,
+          "min": "0",
+          "max": "10000000"
+        },
+        {
+          "key": "createdAt",
+          "type": "string",
+          "required": true,
+          "array": false,
+          "size": 64
+        },
+        {
+          "key": "gamesWon",
+          "type": "integer",
+          "required": false,
+          "array": false,
+          "min": "0",
+          "max": "10000000"
+        },
+        {
+          "key": "totalGames",
+          "type": "integer",
+          "required": false,
+          "array": false,
+          "min": "0",
+          "max": "10000000"
+        },
+        {
+          "key": "totalGuesses",
+          "type": "integer",
+          "required": false,
+          "array": false,
+          "min": "0",
+          "max": "10000000"
+        },
+        {
+          "key": "totalPoints",
+          "type": "integer",
+          "required": false,
+          "array": false,
+          "min": "0",
+          "max": "100000000"
+        },
+        {
+          "key": "updatedAt",
+          "type": "string",
+          "required": true,
+          "array": false,
+          "size": 64
+        },
+        {
+          "key": "userId",
+          "type": "string",
+          "required": true,
+          "array": false,
+          "size": 36
+        }
+      ],
+      "indexes": [
+        {
+          "key": "idx_userId",
+          "type": "unique",
+          "columns": [
+            "userId"
+          ],
+          "orders": []
+        }
+      ],
+      "rowsInspected": 11,
+      "rowPermissionPatterns": [
+        "read(\"any\")",
+        "update(\"user:<owner>\")"
+      ],
+      "rowPermissionTemplates": [
+        [
+          "read(\"any\")",
+          "update(\"user:<owner>\")"
+        ],
+        []
+      ]
+    },
+    {
+      "id": "guest_sessions",
+      "name": "Guest Sessions",
+      "enabled": true,
+      "rowSecurity": false,
+      "permissions": [
+        "create(\"any\")",
+        "read(\"any\")",
+        "update(\"any\")"
+      ],
+      "columns": [
+        {
+          "key": "avatarId",
+          "type": "string",
+          "required": true,
+          "array": false,
+          "size": 32
+        },
+        {
+          "key": "convertedUserId",
+          "type": "string",
+          "required": false,
+          "array": false,
+          "size": 36
+        },
+        {
+          "key": "createdAt",
+          "type": "string",
+          "required": true,
+          "array": false,
+          "size": 64
+        },
+        {
+          "key": "guestUserId",
+          "type": "string",
+          "required": true,
+          "array": false,
+          "size": 36
+        },
+        {
+          "key": "guestUsername",
+          "type": "string",
+          "required": true,
+          "array": false,
+          "size": 32
+        },
+        {
+          "key": "lastActiveAt",
+          "type": "string",
+          "required": true,
+          "array": false,
+          "size": 64
+        },
+        {
+          "key": "migrationStatus",
+          "type": "string",
+          "required": false,
+          "array": false,
+          "size": 16
+        }
+      ],
+      "indexes": [
+        {
+          "key": "idx_guestUserId",
+          "type": "unique",
+          "columns": [
+            "guestUserId"
+          ],
+          "orders": []
+        }
+      ],
+      "rowsInspected": 3,
+      "rowPermissionPatterns": [
+        "read(\"user:<owner>\")",
+        "update(\"user:<owner>\")"
+      ],
+      "rowPermissionTemplates": [
+        [
+          "read(\"user:<owner>\")",
+          "update(\"user:<owner>\")"
+        ]
+      ]
+    },
+    {
+      "id": "guest_migration_records",
+      "name": "Guest Migration Records",
+      "enabled": true,
+      "rowSecurity": true,
+      "permissions": [
+        "create(\"users\")"
+      ],
+      "columns": [
+        {
+          "key": "guestUserId",
+          "type": "string",
+          "required": true,
+          "array": false,
+          "size": 36
+        },
+        {
+          "key": "migratedAt",
+          "type": "string",
+          "required": true,
+          "array": false,
+          "size": 64
+        },
+        {
+          "key": "migrationReference",
+          "type": "string",
+          "required": false,
+          "array": false,
+          "size": 128
+        },
+        {
+          "key": "migrationStatus",
+          "type": "string",
+          "required": true,
+          "array": false,
+          "size": 16
+        },
+        {
+          "key": "migrationVersion",
+          "type": "string",
+          "required": true,
+          "array": false,
+          "size": 16
+        },
+        {
+          "key": "registeredUserId",
+          "type": "string",
+          "required": true,
+          "array": false,
+          "size": 36
+        }
+      ],
+      "indexes": [
+        {
+          "key": "idx_guest_reg",
+          "type": "key",
+          "columns": [
+            "guestUserId",
+            "registeredUserId"
+          ],
+          "orders": []
+        }
+      ],
+      "rowsInspected": 0,
+      "rowPermissionPatterns": [],
+      "rowPermissionTemplates": []
+    },
+    {
+      "id": "player_progression",
+      "name": "Player Progression",
+      "enabled": true,
+      "rowSecurity": false,
+      "permissions": [
+        "read(\"any\")"
+      ],
+      "columns": [
+        {
+          "key": "currentLevel",
+          "type": "integer",
+          "required": false,
+          "array": false,
+          "min": "1",
+          "max": "1000"
+        },
+        {
+          "key": "equippedTitleId",
+          "type": "string",
+          "required": false,
+          "array": false,
+          "size": 36
+        },
+        {
+          "key": "highestLevel",
+          "type": "integer",
+          "required": false,
+          "array": false,
+          "min": "1",
+          "max": "1000"
+        },
+        {
+          "key": "totalXP",
+          "type": "integer",
+          "required": false,
+          "array": false,
+          "min": "0",
+          "max": "100000000"
+        },
+        {
+          "key": "updatedAt",
+          "type": "string",
+          "required": true,
+          "array": false,
+          "size": 64
+        },
+        {
+          "key": "userId",
+          "type": "string",
+          "required": true,
+          "array": false,
+          "size": 36
+        }
+      ],
+      "indexes": [
+        {
+          "key": "idx_userId",
+          "type": "unique",
+          "columns": [
+            "userId"
+          ],
+          "orders": []
+        }
+      ],
+      "rowsInspected": 10,
+      "rowPermissionPatterns": [],
+      "rowPermissionTemplates": [
+        []
+      ]
+    },
+    {
+      "id": "xp_transactions",
+      "name": "XP Transactions",
+      "enabled": true,
+      "rowSecurity": false,
+      "permissions": [
+        "read(\"any\")"
+      ],
+      "columns": [
+        {
+          "key": "amount",
+          "type": "integer",
+          "required": false,
+          "array": false,
+          "min": "0",
+          "max": "100000"
+        },
+        {
+          "key": "createdAt",
+          "type": "string",
+          "required": true,
+          "array": false,
+          "size": 64
+        },
+        {
+          "key": "matchId",
+          "type": "string",
+          "required": false,
+          "array": false,
+          "size": 64
+        },
+        {
+          "key": "reason",
+          "type": "string",
+          "required": true,
+          "array": false,
+          "size": 255
+        },
+        {
+          "key": "rewardType",
+          "type": "string",
+          "required": true,
+          "array": false,
+          "size": 32
+        },
+        {
+          "key": "transactionId",
+          "type": "string",
+          "required": true,
+          "array": false,
+          "size": 64
+        },
+        {
+          "key": "userId",
+          "type": "string",
+          "required": true,
+          "array": false,
+          "size": 36
+        }
+      ],
+      "indexes": [
+        {
+          "key": "idx_txId",
+          "type": "unique",
+          "columns": [
+            "transactionId"
+          ],
+          "orders": []
+        },
+        {
+          "key": "idx_userId",
+          "type": "key",
+          "columns": [
+            "userId"
+          ],
+          "orders": []
+        }
+      ],
+      "rowsInspected": 0,
+      "rowPermissionPatterns": [],
+      "rowPermissionTemplates": []
+    },
+    {
+      "id": "achievements",
+      "name": "Achievements",
+      "enabled": true,
+      "rowSecurity": false,
+      "permissions": [
+        "read(\"any\")"
+      ],
+      "columns": [
+        {
+          "key": "achievementId",
+          "type": "string",
+          "required": true,
+          "array": false,
+          "size": 36
+        },
+        {
+          "key": "category",
+          "type": "string",
+          "required": true,
+          "array": false,
+          "size": 32
+        },
+        {
+          "key": "conditionType",
+          "type": "string",
+          "required": true,
+          "array": false,
+          "size": 32
+        },
+        {
+          "key": "conditionValue",
+          "type": "integer",
+          "required": false,
+          "array": false,
+          "min": "1",
+          "max": "100000"
+        },
+        {
+          "key": "description",
+          "type": "string",
+          "required": true,
+          "array": false,
+          "size": 255
+        },
+        {
+          "key": "iconAsset",
+          "type": "string",
+          "required": true,
+          "array": false,
+          "size": 128
+        },
+        {
+          "key": "isActive",
+          "type": "boolean",
+          "required": false,
+          "array": false
+        },
+        {
+          "key": "name",
+          "type": "string",
+          "required": true,
+          "array": false,
+          "size": 64
+        },
+        {
+          "key": "rarity",
+          "type": "string",
+          "required": true,
+          "array": false,
+          "size": 32
+        },
+        {
+          "key": "rewardXP",
+          "type": "integer",
+          "required": false,
+          "array": false,
+          "min": "0",
+          "max": "100000"
+        },
+        {
+          "key": "sortOrder",
+          "type": "integer",
+          "required": false,
+          "array": false,
+          "min": "0",
+          "max": "1000"
+        }
+      ],
+      "indexes": [
+        {
+          "key": "idx_achievementId",
+          "type": "unique",
+          "columns": [
+            "achievementId"
+          ],
+          "orders": []
+        }
+      ],
+      "rowsInspected": 7,
+      "rowPermissionPatterns": [],
+      "rowPermissionTemplates": [
+        []
+      ]
+    },
+    {
+      "id": "user_achievements",
+      "name": "User Achievements",
+      "enabled": true,
+      "rowSecurity": false,
+      "permissions": [
+        "read(\"any\")"
+      ],
+      "columns": [
+        {
+          "key": "achievementId",
+          "type": "string",
+          "required": true,
+          "array": false,
+          "size": 36
+        },
+        {
+          "key": "progressSnapshot",
+          "type": "integer",
+          "required": false,
+          "array": false,
+          "min": "0",
+          "max": "100000"
+        },
+        {
+          "key": "rewardTransactionId",
+          "type": "string",
+          "required": false,
+          "array": false,
+          "size": 64
+        },
+        {
+          "key": "unlockedAt",
+          "type": "string",
+          "required": true,
+          "array": false,
+          "size": 64
+        },
+        {
+          "key": "userId",
+          "type": "string",
+          "required": true,
+          "array": false,
+          "size": 36
+        }
+      ],
+      "indexes": [
+        {
+          "key": "idx_user_ach",
+          "type": "key",
+          "columns": [
+            "userId",
+            "achievementId"
+          ],
+          "orders": []
+        }
+      ],
+      "rowsInspected": 0,
+      "rowPermissionPatterns": [],
+      "rowPermissionTemplates": []
+    },
+    {
+      "id": "titles",
+      "name": "Titles",
+      "enabled": true,
+      "rowSecurity": false,
+      "permissions": [
+        "read(\"any\")"
+      ],
+      "columns": [
+        {
+          "key": "description",
+          "type": "string",
+          "required": true,
+          "array": false,
+          "size": 255
+        },
+        {
+          "key": "iconAsset",
+          "type": "string",
+          "required": false,
+          "array": false,
+          "size": 128
+        },
+        {
+          "key": "isActive",
+          "type": "boolean",
+          "required": false,
+          "array": false
+        },
+        {
+          "key": "name",
+          "type": "string",
+          "required": true,
+          "array": false,
+          "size": 64
+        },
+        {
+          "key": "rarity",
+          "type": "string",
+          "required": true,
+          "array": false,
+          "size": 32
+        },
+        {
+          "key": "sortOrder",
+          "type": "integer",
+          "required": false,
+          "array": false,
+          "min": "0",
+          "max": "1000"
+        },
+        {
+          "key": "titleId",
+          "type": "string",
+          "required": true,
+          "array": false,
+          "size": 36
+        },
+        {
+          "key": "unlockCondition",
+          "type": "string",
+          "required": true,
+          "array": false,
+          "size": 255
+        }
+      ],
+      "indexes": [
+        {
+          "key": "idx_titleId",
+          "type": "unique",
+          "columns": [
+            "titleId"
+          ],
+          "orders": []
+        }
+      ],
+      "rowsInspected": 5,
+      "rowPermissionPatterns": [],
+      "rowPermissionTemplates": [
+        []
+      ]
+    },
+    {
+      "id": "user_titles",
+      "name": "User Titles",
+      "enabled": true,
+      "rowSecurity": false,
+      "permissions": [
+        "read(\"any\")"
+      ],
+      "columns": [
+        {
+          "key": "titleId",
+          "type": "string",
+          "required": true,
+          "array": false,
+          "size": 36
+        },
+        {
+          "key": "unlockedAt",
+          "type": "string",
+          "required": true,
+          "array": false,
+          "size": 64
+        },
+        {
+          "key": "userId",
+          "type": "string",
+          "required": true,
+          "array": false,
+          "size": 36
+        }
+      ],
+      "indexes": [
+        {
+          "key": "idx_user_title",
+          "type": "key",
+          "columns": [
+            "userId",
+            "titleId"
+          ],
+          "orders": []
+        }
+      ],
+      "rowsInspected": 0,
+      "rowPermissionPatterns": [],
+      "rowPermissionTemplates": []
+    },
+    {
+      "id": "challenges",
+      "name": "Challenges",
+      "enabled": true,
+      "rowSecurity": false,
+      "permissions": [
+        "read(\"any\")"
+      ],
+      "columns": [
+        {
+          "key": "challengeId",
+          "type": "string",
+          "required": true,
+          "array": false,
+          "size": 36
+        },
+        {
+          "key": "description",
+          "type": "string",
+          "required": true,
+          "array": false,
+          "size": 255
+        },
+        {
+          "key": "endsAt",
+          "type": "string",
+          "required": true,
+          "array": false,
+          "size": 64
+        },
+        {
+          "key": "isActive",
+          "type": "boolean",
+          "required": false,
+          "array": false
+        },
+        {
+          "key": "name",
+          "type": "string",
+          "required": true,
+          "array": false,
+          "size": 64
+        },
+        {
+          "key": "period",
+          "type": "string",
+          "required": true,
+          "array": false,
+          "size": 32
+        },
+        {
+          "key": "rewardXP",
+          "type": "integer",
+          "required": false,
+          "array": false,
+          "min": "0",
+          "max": "100000"
+        },
+        {
+          "key": "startsAt",
+          "type": "string",
+          "required": true,
+          "array": false,
+          "size": 64
+        },
+        {
+          "key": "targetValue",
+          "type": "integer",
+          "required": false,
+          "array": false,
+          "min": "1",
+          "max": "100000"
+        },
+        {
+          "key": "type",
+          "type": "string",
+          "required": true,
+          "array": false,
+          "size": 32
+        }
+      ],
+      "indexes": [
+        {
+          "key": "idx_challengeId",
+          "type": "unique",
+          "columns": [
+            "challengeId"
+          ],
+          "orders": []
+        }
+      ],
+      "rowsInspected": 0,
+      "rowPermissionPatterns": [],
+      "rowPermissionTemplates": []
+    },
+    {
+      "id": "user_challenges",
+      "name": "User Challenges",
+      "enabled": true,
+      "rowSecurity": false,
+      "permissions": [
+        "read(\"any\")"
+      ],
+      "columns": [
+        {
+          "key": "challengeId",
+          "type": "string",
+          "required": true,
+          "array": false,
+          "size": 36
+        },
+        {
+          "key": "claimed",
+          "type": "boolean",
+          "required": false,
+          "array": false
+        },
+        {
+          "key": "completed",
+          "type": "boolean",
+          "required": false,
+          "array": false
+        },
+        {
+          "key": "periodKey",
+          "type": "string",
+          "required": true,
+          "array": false,
+          "size": 32
+        },
+        {
+          "key": "progress",
+          "type": "integer",
+          "required": false,
+          "array": false,
+          "min": "0",
+          "max": "100000"
+        },
+        {
+          "key": "userId",
+          "type": "string",
+          "required": true,
+          "array": false,
+          "size": 36
+        }
+      ],
+      "indexes": [
+        {
+          "key": "idx_user_ch",
+          "type": "key",
+          "columns": [
+            "userId",
+            "challengeId",
+            "periodKey"
+          ],
+          "orders": []
+        }
+      ],
+      "rowsInspected": 0,
+      "rowPermissionPatterns": [],
+      "rowPermissionTemplates": []
+    },
+    {
+      "id": "leaderboard_snapshots",
+      "name": "Leaderboard Snapshots",
+      "enabled": true,
+      "rowSecurity": false,
+      "permissions": [
+        "read(\"any\")"
+      ],
+      "columns": [
+        {
+          "key": "avatarId",
+          "type": "string",
+          "required": true,
+          "array": false,
+          "size": 32
+        },
+        {
+          "key": "generatedAt",
+          "type": "string",
+          "required": true,
+          "array": false,
+          "size": 64
+        },
+        {
+          "key": "leaderboardType",
+          "type": "string",
+          "required": true,
+          "array": false,
+          "size": 32
+        },
+        {
+          "key": "level",
+          "type": "integer",
+          "required": false,
+          "array": false,
+          "min": "1",
+          "max": "1000"
+        },
+        {
+          "key": "periodKey",
+          "type": "string",
+          "required": true,
+          "array": false,
+          "size": 32
+        },
+        {
+          "key": "rank",
+          "type": "integer",
+          "required": false,
+          "array": false,
+          "min": "1",
+          "max": "100000"
+        },
+        {
+          "key": "score",
+          "type": "integer",
+          "required": false,
+          "array": false,
+          "min": "0",
+          "max": "100000000"
+        },
+        {
+          "key": "userId",
+          "type": "string",
+          "required": true,
+          "array": false,
+          "size": 36
+        },
+        {
+          "key": "username",
+          "type": "string",
+          "required": true,
+          "array": false,
+          "size": 32
+        }
+      ],
+      "indexes": [
+        {
+          "key": "idx_lb_type_period",
+          "type": "key",
+          "columns": [
+            "leaderboardType",
+            "periodKey"
+          ],
+          "orders": []
+        }
+      ],
+      "rowsInspected": 0,
+      "rowPermissionPatterns": [],
+      "rowPermissionTemplates": []
+    },
+    {
+      "id": "admin_roles",
+      "name": "Admin Roles",
+      "enabled": true,
+      "rowSecurity": false,
+      "permissions": [
+        "read(\"users\")"
+      ],
+      "columns": [
+        {
+          "key": "assignedAt",
+          "type": "string",
+          "required": true,
+          "array": false,
+          "size": 64
+        },
+        {
+          "key": "assignedBy",
+          "type": "string",
+          "required": true,
+          "array": false,
+          "size": 36
+        },
+        {
+          "key": "isActive",
+          "type": "boolean",
+          "required": false,
+          "array": false
+        },
+        {
+          "key": "role",
+          "type": "string",
+          "required": true,
+          "array": false,
+          "size": 32
+        },
+        {
+          "key": "userId",
+          "type": "string",
+          "required": true,
+          "array": false,
+          "size": 36
+        },
+        {
+          "key": "username",
+          "type": "string",
+          "required": true,
+          "array": false,
+          "size": 32
+        }
+      ],
+      "indexes": [
+        {
+          "key": "idx_userId",
+          "type": "unique",
+          "columns": [
+            "userId"
+          ],
+          "orders": []
+        }
+      ],
+      "rowsInspected": 2,
+      "rowPermissionPatterns": [],
+      "rowPermissionTemplates": [
+        []
+      ]
+    },
+    {
+      "id": "audit_logs",
+      "name": "Audit Logs",
+      "enabled": true,
+      "rowSecurity": false,
+      "permissions": [
+        "read(\"users\")"
+      ],
+      "columns": [
+        {
+          "key": "action",
+          "type": "string",
+          "required": true,
+          "array": false,
+          "size": 64
+        },
+        {
+          "key": "actorRole",
+          "type": "string",
+          "required": true,
+          "array": false,
+          "size": 32
+        },
+        {
+          "key": "actorUserId",
+          "type": "string",
+          "required": true,
+          "array": false,
+          "size": 36
+        },
+        {
+          "key": "actorUsername",
+          "type": "string",
+          "required": true,
+          "array": false,
+          "size": 32
+        },
+        {
+          "key": "createdAt",
+          "type": "string",
+          "required": true,
+          "array": false,
+          "size": 64
+        },
+        {
+          "key": "id",
+          "type": "string",
+          "required": true,
+          "array": false,
+          "size": 64
+        },
+        {
+          "key": "ipAddress",
+          "type": "string",
+          "required": false,
+          "array": false,
+          "size": 64
+        },
+        {
+          "key": "reason",
+          "type": "string",
+          "required": false,
+          "array": false,
+          "size": 255
+        },
+        {
+          "key": "resourceId",
+          "type": "string",
+          "required": true,
+          "array": false,
+          "size": 64
+        },
+        {
+          "key": "resourceType",
+          "type": "string",
+          "required": true,
+          "array": false,
+          "size": 32
+        },
+        {
+          "key": "status",
+          "type": "string",
+          "required": false,
+          "array": false,
+          "size": 16
+        }
+      ],
+      "indexes": [
+        {
+          "key": "idx_actor",
+          "type": "key",
+          "columns": [
+            "actorUserId"
+          ],
+          "orders": []
+        },
+        {
+          "key": "idx_res",
+          "type": "key",
+          "columns": [
+            "resourceType"
+          ],
+          "orders": []
+        }
+      ],
+      "rowsInspected": 0,
+      "rowPermissionPatterns": [],
+      "rowPermissionTemplates": []
+    },
+    {
+      "id": "blog_posts",
+      "name": "Blog Posts",
+      "enabled": true,
+      "rowSecurity": false,
+      "permissions": [
+        "read(\"any\")"
+      ],
+      "columns": [
+        {
+          "key": "authorId",
+          "type": "string",
+          "required": true,
+          "array": false,
+          "size": 36
+        },
+        {
+          "key": "authorName",
+          "type": "string",
+          "required": true,
+          "array": false,
+          "size": 64
+        },
+        {
+          "key": "categoryId",
+          "type": "string",
+          "required": false,
+          "array": false,
+          "size": 32
+        },
+        {
+          "key": "content",
+          "type": "string",
+          "required": false,
+          "array": false,
+          "size": 10000
+        },
+        {
+          "key": "createdAt",
+          "type": "string",
+          "required": true,
+          "array": false,
+          "size": 64
+        },
+        {
+          "key": "excerpt",
+          "type": "string",
+          "required": false,
+          "array": false,
+          "size": 500
+        },
+        {
+          "key": "featuredImage",
+          "type": "string",
+          "required": false,
+          "array": false,
+          "size": 255
+        },
+        {
+          "key": "id",
+          "type": "string",
+          "required": true,
+          "array": false,
+          "size": 64
+        },
+        {
+          "key": "publishedAt",
+          "type": "string",
+          "required": false,
+          "array": false,
+          "size": 64
+        },
+        {
+          "key": "seoDescription",
+          "type": "string",
+          "required": false,
+          "array": false,
+          "size": 255
+        },
+        {
+          "key": "seoTitle",
+          "type": "string",
+          "required": false,
+          "array": false,
+          "size": 128
+        },
+        {
+          "key": "slug",
+          "type": "string",
+          "required": true,
+          "array": false,
+          "size": 128
+        },
+        {
+          "key": "status",
+          "type": "string",
+          "required": false,
+          "array": false,
+          "size": 16
+        },
+        {
+          "key": "title",
+          "type": "string",
+          "required": true,
+          "array": false,
+          "size": 255
+        },
+        {
+          "key": "updatedAt",
+          "type": "string",
+          "required": true,
+          "array": false,
+          "size": 64
+        },
+        {
+          "key": "views",
+          "type": "integer",
+          "required": false,
+          "array": false,
+          "min": "0",
+          "max": "10000000"
+        }
+      ],
+      "indexes": [
+        {
+          "key": "idx_slug",
+          "type": "unique",
+          "columns": [
+            "slug"
+          ],
+          "orders": []
+        }
+      ],
+      "rowsInspected": 1,
+      "rowPermissionPatterns": [],
+      "rowPermissionTemplates": [
+        []
+      ]
+    },
+    {
+      "id": "blog_categories",
+      "name": "Blog Categories",
+      "enabled": true,
+      "rowSecurity": false,
+      "permissions": [
+        "read(\"any\")"
+      ],
+      "columns": [
+        {
+          "key": "description",
+          "type": "string",
+          "required": false,
+          "array": false,
+          "size": 255
+        },
+        {
+          "key": "id",
+          "type": "string",
+          "required": true,
+          "array": false,
+          "size": 32
+        },
+        {
+          "key": "isActive",
+          "type": "boolean",
+          "required": false,
+          "array": false
+        },
+        {
+          "key": "name",
+          "type": "string",
+          "required": true,
+          "array": false,
+          "size": 64
+        },
+        {
+          "key": "slug",
+          "type": "string",
+          "required": true,
+          "array": false,
+          "size": 64
+        }
+      ],
+      "indexes": [
+        {
+          "key": "idx_slug",
+          "type": "unique",
+          "columns": [
+            "slug"
+          ],
+          "orders": []
+        }
+      ],
+      "rowsInspected": 3,
+      "rowPermissionPatterns": [],
+      "rowPermissionTemplates": [
+        []
+      ]
+    },
+    {
+      "id": "advertisements",
+      "name": "Advertisements",
+      "enabled": true,
+      "rowSecurity": false,
+      "permissions": [
+        "read(\"any\")"
+      ],
+      "columns": [
+        {
+          "key": "clicks",
+          "type": "integer",
+          "required": false,
+          "array": false,
+          "min": "0",
+          "max": "100000000"
+        },
+        {
+          "key": "createdAt",
+          "type": "string",
+          "required": true,
+          "array": false,
+          "size": 64
+        },
+        {
+          "key": "creativeType",
+          "type": "string",
+          "required": true,
+          "array": false,
+          "size": 16
+        },
+        {
+          "key": "description",
+          "type": "string",
+          "required": false,
+          "array": false,
+          "size": 255
+        },
+        {
+          "key": "destinationUrl",
+          "type": "string",
+          "required": true,
+          "array": false,
+          "size": 255
+        },
+        {
+          "key": "endAt",
+          "type": "string",
+          "required": false,
+          "array": false,
+          "size": 64
+        },
+        {
+          "key": "headline",
+          "type": "string",
+          "required": true,
+          "array": false,
+          "size": 128
+        },
+        {
+          "key": "id",
+          "type": "string",
+          "required": true,
+          "array": false,
+          "size": 64
+        },
+        {
+          "key": "imagePath",
+          "type": "string",
+          "required": false,
+          "array": false,
+          "size": 255
+        },
+        {
+          "key": "impressions",
+          "type": "integer",
+          "required": false,
+          "array": false,
+          "min": "0",
+          "max": "100000000"
+        },
+        {
+          "key": "name",
+          "type": "string",
+          "required": true,
+          "array": false,
+          "size": 64
+        },
+        {
+          "key": "placement",
+          "type": "string",
+          "required": true,
+          "array": false,
+          "size": 32
+        },
+        {
+          "key": "priority",
+          "type": "integer",
+          "required": false,
+          "array": false,
+          "min": "0",
+          "max": "1000"
+        },
+        {
+          "key": "startAt",
+          "type": "string",
+          "required": true,
+          "array": false,
+          "size": 64
+        },
+        {
+          "key": "status",
+          "type": "string",
+          "required": false,
+          "array": false,
+          "size": 16
+        },
+        {
+          "key": "updatedAt",
+          "type": "string",
+          "required": true,
+          "array": false,
+          "size": 64
+        }
+      ],
+      "indexes": [
+        {
+          "key": "idx_placement",
+          "type": "key",
+          "columns": [
+            "placement"
+          ],
+          "orders": []
+        }
+      ],
+      "rowsInspected": 7,
+      "rowPermissionPatterns": [],
+      "rowPermissionTemplates": [
+        []
+      ]
+    },
+    {
+      "id": "moderation_reports",
+      "name": "Moderation Reports",
+      "enabled": true,
+      "rowSecurity": true,
+      "permissions": [
+        "create(\"users\")"
+      ],
+      "columns": [
+        {
+          "key": "assignedModeratorId",
+          "type": "string",
+          "required": false,
+          "array": false,
+          "size": 36
+        },
+        {
+          "key": "createdAt",
+          "type": "string",
+          "required": true,
+          "array": false,
+          "size": 64
+        },
+        {
+          "key": "description",
+          "type": "string",
+          "required": true,
+          "array": false,
+          "size": 500
+        },
+        {
+          "key": "evidenceReference",
+          "type": "string",
+          "required": false,
+          "array": false,
+          "size": 255
+        },
+        {
+          "key": "id",
+          "type": "string",
+          "required": true,
+          "array": false,
+          "size": 64
+        },
+        {
+          "key": "moderatorNotes",
+          "type": "string",
+          "required": false,
+          "array": false,
+          "size": 500
+        },
+        {
+          "key": "reportedUserId",
+          "type": "string",
+          "required": false,
+          "array": false,
+          "size": 36
+        },
+        {
+          "key": "reportedUsername",
+          "type": "string",
+          "required": false,
+          "array": false,
+          "size": 32
+        },
+        {
+          "key": "reporterUserId",
+          "type": "string",
+          "required": true,
+          "array": false,
+          "size": 36
+        },
+        {
+          "key": "reporterUsername",
+          "type": "string",
+          "required": true,
+          "array": false,
+          "size": 32
+        },
+        {
+          "key": "reportType",
+          "type": "string",
+          "required": true,
+          "array": false,
+          "size": 16
+        },
+        {
+          "key": "resolutionAction",
+          "type": "string",
+          "required": false,
+          "array": false,
+          "size": 64
+        },
+        {
+          "key": "roomId",
+          "type": "string",
+          "required": false,
+          "array": false,
+          "size": 32
+        },
+        {
+          "key": "status",
+          "type": "string",
+          "required": false,
+          "array": false,
+          "size": 16
+        },
+        {
+          "key": "updatedAt",
+          "type": "string",
+          "required": true,
+          "array": false,
+          "size": 64
+        }
+      ],
+      "indexes": [
+        {
+          "key": "idx_status",
+          "type": "key",
+          "columns": [
+            "status"
+          ],
+          "orders": []
+        }
+      ],
+      "rowsInspected": 0,
+      "rowPermissionPatterns": [],
+      "rowPermissionTemplates": []
+    },
+    {
+      "id": "moderation_actions",
+      "name": "Moderation Actions",
+      "enabled": true,
+      "rowSecurity": false,
+      "permissions": [
+        "read(\"users\")"
+      ],
+      "columns": [
+        {
+          "key": "actionType",
+          "type": "string",
+          "required": true,
+          "array": false,
+          "size": 16
+        },
+        {
+          "key": "createdAt",
+          "type": "string",
+          "required": true,
+          "array": false,
+          "size": 64
+        },
+        {
+          "key": "expiresAt",
+          "type": "string",
+          "required": false,
+          "array": false,
+          "size": 64
+        },
+        {
+          "key": "id",
+          "type": "string",
+          "required": true,
+          "array": false,
+          "size": 64
+        },
+        {
+          "key": "moderatorUserId",
+          "type": "string",
+          "required": true,
+          "array": false,
+          "size": 36
+        },
+        {
+          "key": "moderatorUsername",
+          "type": "string",
+          "required": true,
+          "array": false,
+          "size": 32
+        },
+        {
+          "key": "reason",
+          "type": "string",
+          "required": true,
+          "array": false,
+          "size": 255
+        },
+        {
+          "key": "targetUserId",
+          "type": "string",
+          "required": true,
+          "array": false,
+          "size": 36
+        },
+        {
+          "key": "targetUsername",
+          "type": "string",
+          "required": true,
+          "array": false,
+          "size": 32
+        }
+      ],
+      "indexes": [
+        {
+          "key": "idx_target",
+          "type": "key",
+          "columns": [
+            "targetUserId"
+          ],
+          "orders": []
+        }
+      ],
+      "rowsInspected": 0,
+      "rowPermissionPatterns": [],
+      "rowPermissionTemplates": []
+    },
+    {
+      "id": "platform_settings",
+      "name": "Platform Settings",
+      "enabled": true,
+      "rowSecurity": false,
+      "permissions": [
+        "read(\"any\")"
+      ],
+      "columns": [
+        {
+          "key": "allowCustomWords",
+          "type": "boolean",
+          "required": false,
+          "array": false
+        },
+        {
+          "key": "chatRateLimitPerMinute",
+          "type": "integer",
+          "required": false,
+          "array": false,
+          "min": "5",
+          "max": "300"
+        },
+        {
+          "key": "defaultLanguage",
+          "type": "string",
+          "required": false,
+          "array": false,
+          "size": 16
+        },
+        {
+          "key": "emailVerificationRequired",
+          "type": "boolean",
+          "required": false,
+          "array": false
+        },
+        {
+          "key": "guessRateLimitPerMinute",
+          "type": "integer",
+          "required": false,
+          "array": false,
+          "min": "5",
+          "max": "300"
+        },
+        {
+          "key": "guestAccessEnabled",
+          "type": "boolean",
+          "required": false,
+          "array": false
+        },
+        {
+          "key": "maintenanceMode",
+          "type": "boolean",
+          "required": false,
+          "array": false
+        },
+        {
+          "key": "maxRoomCapacity",
+          "type": "integer",
+          "required": false,
+          "array": false,
+          "min": "2",
+          "max": "32"
+        },
+        {
+          "key": "platformDescription",
+          "type": "string",
+          "required": false,
+          "array": false,
+          "size": 255
+        },
+        {
+          "key": "platformName",
+          "type": "string",
+          "required": true,
+          "array": false,
+          "size": 64
+        },
+        {
+          "key": "publicSupportEmail",
+          "type": "string",
+          "required": false,
+          "array": false,
+          "size": 128
+        },
+        {
+          "key": "registrationEnabled",
+          "type": "boolean",
+          "required": false,
+          "array": false
+        },
+        {
+          "key": "updatedAt",
+          "type": "string",
+          "required": true,
+          "array": false,
+          "size": 64
+        },
+        {
+          "key": "updatedBy",
+          "type": "string",
+          "required": false,
+          "array": false,
+          "size": 36
+        }
+      ],
+      "indexes": [],
+      "rowsInspected": 1,
+      "rowPermissionPatterns": [],
+      "rowPermissionTemplates": [
+        []
+      ]
+    },
+    {
+      "id": "custom_words",
+      "name": "Custom Words",
+      "enabled": true,
+      "rowSecurity": false,
+      "permissions": [
+        "read(\"any\")"
+      ],
+      "columns": [
+        {
+          "key": "category",
+          "type": "string",
+          "required": true,
+          "array": false,
+          "size": 32
+        },
+        {
+          "key": "difficulty",
+          "type": "string",
+          "required": true,
+          "array": false,
+          "size": 16
+        },
+        {
+          "key": "id",
+          "type": "string",
+          "required": true,
+          "array": false,
+          "size": 64
+        },
+        {
+          "key": "isActive",
+          "type": "boolean",
+          "required": false,
+          "array": false
+        },
+        {
+          "key": "word",
+          "type": "string",
+          "required": true,
+          "array": false,
+          "size": 64
+        }
+      ],
+      "indexes": [
+        {
+          "key": "idx_word",
+          "type": "unique",
+          "columns": [
+            "word"
+          ],
+          "orders": []
+        }
+      ],
+      "rowsInspected": 0,
+      "rowPermissionPatterns": [],
+      "rowPermissionTemplates": []
+    }
+  ]
+}

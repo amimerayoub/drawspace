@@ -1,8 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Navigate, useNavigate, useParams } from 'react-router-dom';
 import { useI18n } from '@/i18n/I18nContext';
 import { useAuth } from '@/context/AuthContext';
-import { roomService } from '@/services';
+import { ApiError } from '@/services/apiClient';
+import { socketClient } from '@/services/socketClient';
 import { SeoHead } from '@/components/SeoHead';
 import { Button, Field, Input } from '@/components/ui';
 
@@ -15,26 +16,20 @@ export default function JoinRoom() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [needsPassword, setNeedsPassword] = useState(false);
-
-  useEffect(() => {
-    if (code.trim().length === 6) {
-      const room = roomService.get(code.trim());
-      setNeedsPassword(Boolean(room?.hasPassword));
-    } else {
-      setNeedsPassword(false);
-    }
-  }, [code]);
+  const [busy, setBusy] = useState(false);
 
   if (!user) return <Navigate to={path('/play')} replace />;
 
-  const submit = () => {
+  const submit = async () => {
     setError('');
+    setBusy(true);
     try {
-      const room = roomService.join(code.trim(), password, user);
-      navigate(path(`/room/${room.code}`));
+      const result = await socketClient.request<{ room: { code: string } }>('room:join', { code: code.trim().toUpperCase(), password: password || undefined });
+      navigate(path(`/room/${result.room.code}`));
     } catch (e) {
+      if (e instanceof ApiError && e.code === 'INVALID_PASSWORD') setNeedsPassword(true);
       setError((e as Error).message);
-    }
+    } finally { setBusy(false); }
   };
 
   return (
@@ -50,7 +45,7 @@ export default function JoinRoom() {
             className="join-form"
             onSubmit={(e) => {
               e.preventDefault();
-              submit();
+              void submit();
             }}
           >
             <Field label={t('join.code')} error={error && !needsPassword ? error : undefined} htmlFor="join-code">
@@ -70,7 +65,7 @@ export default function JoinRoom() {
                 <Input id="join-password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="off" />
               </Field>
             )}
-            <Button variant="primary" type="submit" disabled={code.trim().length < 6} className="join-submit">
+            <Button variant="primary" type="submit" disabled={code.trim().length < 6} loading={busy} className="join-submit">
               {t('common.joinRoom')}
             </Button>
           </form>

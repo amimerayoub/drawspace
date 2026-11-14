@@ -7,8 +7,10 @@ import { roomService } from '@/services';
 import { Badge, Button, ConfirmDialog, Field, Input, Modal, NativeSelect } from '@/components/ui';
 import { DataTable, type Column } from '@/components/DataTable';
 import { AdminPage, useAdmin } from './shared';
+import { UnavailableFeature } from './UnavailableFeature';
 
 export default function Rooms() {
+  return <UnavailableFeature title="Room management" explanation="Rooms currently exist only in process memory and are not exposed through an admin API. Demo room controls are disabled." />;
   const db = useDb();
   const { name, can } = useAdmin();
   const { toast } = useToast();

@@ -1,36 +1,32 @@
-import { useState } from 'react';
-import { RotateCcw, Save } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { Save } from 'lucide-react';
 import type { Locale, SystemSettings } from '@/types';
-import { useDb } from '@/hooks/useDb';
 import { useToast } from '@/context/ToastContext';
-import { adminService } from '@/services';
-import { commit, resetDb } from '@/services/db';
+import { backendAdminService } from '@/services/backendAdmin.service';
 import { LOCALES } from '@/i18n/I18nContext';
-import { Button, ConfirmDialog, Field, Input, NativeSelect, Switch } from '@/components/ui';
-import { AdminPage, FieldRow, useAdmin } from './shared';
+import { Button, Input, NativeSelect, Switch } from '@/components/ui';
+import { AdminPage, FieldRow } from './shared';
 
 export default function Settings() {
-  const db = useDb();
-  const { name } = useAdmin();
   const { toast } = useToast();
-  const [form, setForm] = useState<SystemSettings>({ ...db.settings });
-  const [resetting, setResetting] = useState(false);
+  const [form, setForm] = useState<SystemSettings>({ siteName: '', tagline: '', maintenance: false, registrationOpen: false, guestPlay: false, defaultLocale: 'en-US', contactEmail: '' });
+  const [error, setError] = useState('');
+  useEffect(() => { void backendAdminService.settings().then((settings) => { if (settings) setForm(settings); }).catch((e: unknown) => setError(e instanceof Error ? e.message : 'Platform settings could not be loaded.')); }, []);
 
-  const save = () => {
+  const save = async () => {
     if (!form.siteName.trim()) { toast('Site name cannot be empty.', 'error'); return; }
     if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(form.contactEmail)) { toast('Enter a valid contact email.', 'error'); return; }
-    adminService.audit(name, 'settings.update', 'system', JSON.stringify(db.settings), JSON.stringify(form));
-    Object.assign(db.settings, form);
-    commit();
-    toast('System settings saved.', 'success');
+    try { await backendAdminService.saveSettings(form); toast('Platform settings saved.', 'success'); setError(''); }
+    catch (e) { toast(e instanceof Error ? e.message : 'Platform settings could not be saved.', 'error'); }
   };
 
   return (
     <AdminPage
       title="System settings"
-      sub="Site identity, access switches, and demo data."
-      actions={<Button variant="primary" icon={<Save size={15} />} onClick={save}>Save changes</Button>}
+      sub="Site identity and access switches are stored in the platform settings table."
+      actions={<Button variant="primary" icon={<Save size={15} />} onClick={() => void save()} disabled={Boolean(error)}>Save changes</Button>}
     >
+      {error && <p role="alert" className="muted">{error}</p>}
       <div className="admin-grid-2">
         <div className="panel panel-pad">
           <h2 className="admin-panel-title">Identity</h2>
@@ -61,18 +57,12 @@ export default function Settings() {
           </div>
           <div className="admin-danger-zone">
             <h2 className="admin-panel-title">Demo data</h2>
-            <p className="muted">Restore the original seed data. All local changes, including accounts and matches, are replaced.</p>
-            <Button variant="danger" icon={<RotateCcw size={15} />} onClick={() => setResetting(true)}>Reset demo data</Button>
+            <p className="muted">Reset is disabled in the connected production admin. It only applied to local mock data.</p>
+            <Button variant="danger" icon={<Save size={15} />} disabled>Reset demo data unavailable</Button>
           </div>
         </div>
       </div>
 
-      <ConfirmDialog
-        open={resetting} onClose={() => setResetting(false)}
-        onConfirm={() => { resetDb(); toast('Demo data restored to the original seed.', 'success'); }}
-        title="Reset demo data" body="Replace all local data with the original seed? This cannot be undone."
-        confirmLabel="Reset data"
-      />
     </AdminPage>
   );
 }

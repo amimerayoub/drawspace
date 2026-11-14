@@ -1,18 +1,21 @@
 import type { ReactNode } from 'react';
 import { useAuth } from '@/context/AuthContext';
-import { db } from '@/services';
 
-export const STAFF_ROLES = ['admin', 'superadmin', 'moderator', 'support'] as const;
+export const STAFF_ROLES = ['admin', 'superadmin', 'moderator', 'support', 'content_manager', 'analyst'] as const;
 
 export function useAdmin() {
   const { user } = useAuth();
   const role = user?.role ?? 'guest';
-  const perms = db.rolePermissions[role] ?? [];
+  const rolePermissions: Record<string, string[]> = {
+    superadmin: ['*'], admin: ['*'], moderator: ['users.view', 'moderation.handle', 'rooms.view', 'audit.view'],
+    content_manager: ['words.manage', 'content.blog', 'content.ads', 'content.media'], analyst: ['analytics.view', 'audit.view'], support: ['analytics.view', 'audit.view'],
+  };
+  const perms = rolePermissions[role] ?? [];
   return {
     name: user?.username ?? 'admin',
     role,
     isStaff: (STAFF_ROLES as readonly string[]).includes(role),
-    can: (perm: string) => perms.includes(perm),
+    can: (perm: string) => perms.includes('*') || perms.includes(perm),
   };
 }
 

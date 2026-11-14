@@ -1,11 +1,11 @@
 import {
   ACHIEVEMENTS, ADS, ARTICLES, AUDIT, AVATARS, CHALLENGES, CRM_MESSAGES, GAME_CONFIG,
-  LEADERBOARD, MATCHES, MEDIA, PUBLIC_ROOMS, REDIRECTS, REPORTS, REWARDS, ROLE_PERMISSIONS,
+  LEADERBOARD, MEDIA, PUBLIC_ROOMS, REDIRECTS, REPORTS, REWARDS, ROLE_PERMISSIONS,
   SEO_RECORDS, SYSTEM_SETTINGS, TITLES, USERS, WORDS, XP_CONFIG,
 } from '@/data/mock';
 import type {
   Achievement, AdUnit, Article, AuditEntry, AvatarDef, Challenge, CrmMessage, GameConfig,
-  LeaderboardEntry, MatchRecord, MediaAsset, Report, RewardEntry, Room, RedirectRule,
+  LeaderboardEntry, MediaAsset, Report, RewardEntry, Room, RedirectRule,
   SeoRecord, SystemSettings, Title, User, Word, XpConfig,
 } from '@/types';
 
@@ -18,7 +18,6 @@ export interface Db {
   titles: Title[];
   challenges: Challenge[];
   rewards: RewardEntry[];
-  matches: MatchRecord[];
   leaderboard: LeaderboardEntry[];
   articles: Article[];
   ads: AdUnit[];
@@ -40,7 +39,7 @@ function seed(): Db {
   return structuredClone({
     users: USERS, avatars: AVATARS, words: WORDS, rooms: PUBLIC_ROOMS,
     achievements: ACHIEVEMENTS, titles: TITLES, challenges: CHALLENGES, rewards: REWARDS,
-    matches: MATCHES, leaderboard: LEADERBOARD, articles: ARTICLES, ads: ADS, media: MEDIA,
+    leaderboard: LEADERBOARD, articles: ARTICLES, ads: ADS, media: MEDIA,
     audit: AUDIT, reports: REPORTS, seo: SEO_RECORDS, redirects: REDIRECTS, crm: CRM_MESSAGES,
     gameConfig: GAME_CONFIG, xpConfig: XP_CONFIG, settings: SYSTEM_SETTINGS,
     rolePermissions: ROLE_PERMISSIONS,

@@ -1,0 +1,13 @@
+{
+  "format": "drawspace-words",
+  "version": 1,
+  "words": [
+    { "word": "Cat", "language": "en", "category": "Animals", "difficulty": "easy", "active": true },
+    { "word": "Elephant", "language": "en", "category": "Animals", "difficulty": "medium", "active": true },
+    { "word": "Mountain", "language": "en", "category": "Nature", "difficulty": "hard", "active": true },
+    { "word": "Apple", "language": "en", "category": "Food", "difficulty": "easy", "active": true },
+    { "word": "Computer", "language": "en", "category": "Technology", "difficulty": "medium", "active": true },
+    { "word": "papillon", "language": "fr", "category": "Animaux", "difficulty": "easy", "hint": "Insecte aux ailes colorées", "active": true },
+    { "word": "قطة", "language": "ar", "category": "حيوانات", "difficulty": "easy", "hint": "حيوان أليف", "active": true }
+  ]
+}
