@@ -26,6 +26,7 @@ export interface Room {
   passwordSalt?: string; passwordHash?: string; status: RoomStatus;
   players: Map<string, Player>; order: string[]; round: number; drawerIndex: number;
   turnsCompleted: number;
+  turnId: number;
   roundEndEmitted: boolean;
   drawerUserId: string | null; choices: WordChoice[]; secretWord: string | null;
   startedAt: number; deadline: number; strokes: Stroke[]; undo: Stroke[][]; redo: Stroke[][];
@@ -68,7 +69,7 @@ export class GameEngine {
   private restore(state: EncodedState | null) {
     this.rooms = new Map((state?.rooms || []).map((item) => [item.id, { ...item, players: new Map(item.players) }]));
     this.roomCodes = new Map(); this.userRooms = new Map();
-    for (const room of this.rooms.values()) { this.roomCodes.set(room.code, room.id); for (const id of room.players.keys()) this.userRooms.set(id, room.code); }
+    for (const room of this.rooms.values()) { if (room.status === 'closed') continue; this.roomCodes.set(room.code, room.id); for (const id of room.players.keys()) this.userRooms.set(id, room.code); }
   }
   private encodeRoom(room: Room): EncodedRoom { return { ...room, players: [...room.players.entries()] }; }
   private pruneExpired() { const now = this.now(); for (const room of this.rooms.values()) if (room.expiresAt <= now) { this.rooms.delete(room.id); this.roomCodes.delete(room.code); for (const id of room.players.keys()) this.userRooms.delete(id); } }
@@ -99,7 +100,7 @@ export class GameEngine {
   async setWordChoices(code: string, drawerId: string, choices: WordChoice[]): Promise<Room> { return this.run(() => this.setWordChoicesLocal(code, drawerId, choices)); }
   async chooseWord(code: string, userId: string, wordId: string, socketId?: string): Promise<{ room: Room; word: string }> { return this.run(() => this.chooseWordLocal(code, userId, wordId, socketId)); }
   async guess(code: string, userId: string, rawGuess: string, socketId?: string): Promise<{ room: Room; correct: boolean; points: number; word?: string; roundEnded: boolean }> { return this.run(() => this.guessLocal(code, userId, rawGuess, socketId)); }
-  async addStroke(code: string, userId: string, stroke: Stroke, socketId?: string): Promise<Room> { return this.run(() => this.addStrokeLocal(code, userId, stroke, socketId)); }
+  async addStroke(code: string, userId: string, stroke: Stroke, socketId?: string, turnId?: number): Promise<Room> { return this.run(() => this.addStrokeLocal(code, userId, stroke, socketId, turnId)); }
   async replaceStrokes(code: string, userId: string, action: 'undo' | 'redo', socketId?: string): Promise<Room> { return this.run(() => this.replaceStrokesLocal(code, userId, action, socketId)); }
   async clearDrawing(code: string, userId: string, socketId?: string): Promise<Room> { return this.run(() => this.clearDrawingLocal(code, userId, socketId)); }
   async endRound(code: string): Promise<Room> { return this.run(() => this.endRoundLocal(code)); }
@@ -113,6 +114,27 @@ export class GameEngine {
   async get(code: string): Promise<Room> { return this.run(() => this.requireRoom(code)); }
   async roomForUser(userId: string): Promise<Room | null> { return this.run(() => { const code = this.userRooms.get(userId); return code ? this.rooms.get(this.roomCodes.get(code) || '') ?? null : null; }); }
   playerFor(room: Room, userId: string): Player { return this.requirePlayer(room, userId); }
+
+  async adminClose(code: string): Promise<Room> {
+    return this.run(() => {
+      const room = this.requireRoom(code);
+      room.status = 'closed';
+      room.deadline = 0; room.choices = []; room.choiceDeadline = 0; room.transitionAt = 0;
+      room.strokes = []; room.undo = []; room.redo = [];
+      for (const id of room.players.keys()) this.userRooms.delete(id);
+      return room;
+    });
+  }
+  async adminKick(code: string, userId: string): Promise<{ room: Room | null; socketId: string | null }> {
+    return this.run(() => {
+      const room = this.requireRoom(code);
+      const player = room.players.get(userId);
+      if (!player) throw new GameError('That player is not in this room.', 'NOT_IN_ROOM');
+      const socketId = player.lastSocketId;
+      const remaining = this.leaveLocal(code, userId);
+      return { room: remaining, socketId };
+    });
+  }
 
   private createRoomLocal(host: PlayerIdentity, input: RoomSettings, socketId: string): Room {
     if (this.userRooms.has(host.userId)) this.leaveLocal(this.userRooms.get(host.userId)!, host.userId);
@@ -134,7 +156,7 @@ export class GameEngine {
     const room: Room = {
       id: randomUUID(), code, name: settings.name, hostUserId: host.userId, settings,
       passwordSalt: salt, passwordHash: salt ? this.hash(input.password!, salt) : undefined,
-      status: 'waiting', players: new Map(), order: [], round: 0, drawerIndex: -1, turnsCompleted: 0, roundEndEmitted: false,
+      status: 'waiting', players: new Map(), order: [], round: 0, drawerIndex: -1, turnsCompleted: 0, turnId: 0, roundEndEmitted: false,
       drawerUserId: null, choices: [], secretWord: null, startedAt: 0, deadline: 0,
       strokes: [], undo: [], redo: [], expiresAt: this.now() + this.roomTtlSeconds * 1000, choiceDeadline: 0, transitionAt: 0,
     };
@@ -197,6 +219,7 @@ export class GameEngine {
     room.secretWord = choice.word;
     room.status = 'drawing'; room.startedAt = this.now(); room.deadline = room.startedAt + room.settings.roundSeconds * 1000;
     room.roundEndEmitted = false; room.choiceDeadline = 0; room.transitionAt = 0;
+    room.turnId += 1;
     room.choices = []; room.strokes = []; room.undo = []; room.redo = [];
     for (const player of room.players.values()) player.hasGuessed = player.userId === userId;
     return { room, word: choice.word };
@@ -226,8 +249,9 @@ export class GameEngine {
     return { room, correct: true, points, word, roundEnded: allGuessed };
   }
 
-  private addStrokeLocal(code: string, userId: string, stroke: Stroke, socketId?: string): Room {
+  private addStrokeLocal(code: string, userId: string, stroke: Stroke, socketId?: string, turnId?: number): Room {
     const room = this.requireRoom(code); this.assertDrawer(room, userId, 'drawing', socketId);
+    if (turnId !== undefined && turnId !== room.turnId) throw new GameError('This drawing belongs to a previous round.', 'STALE_TURN');
     if (room.strokes.length >= 2500) throw new GameError('Drawing limit reached.', 'DRAWING_LIMIT');
     room.undo.push(structuredClone(room.strokes)); room.redo = []; room.strokes.push(structuredClone(stroke));
     return room;
@@ -254,6 +278,7 @@ export class GameEngine {
     room.turnsCompleted += 1;
     room.status = room.turnsCompleted >= room.settings.rounds * room.order.length ? 'finished' : 'round_end';
     room.deadline = 0; room.choices = []; room.choiceDeadline = 0; room.transitionAt = room.status === 'round_end' ? this.now() + 4_000 : 0;
+    room.strokes = []; room.undo = []; room.redo = [];
     return room;
   }
 
@@ -267,6 +292,7 @@ export class GameEngine {
     if (!room.players.get(room.order[room.drawerIndex])?.connected) throw new GameError('No connected player is available for the next turn.', 'NO_DRAWER');
     room.status = 'choosing';
     room.transitionAt = 0; room.choiceDeadline = this.now() + 15_000;
+    room.strokes = []; room.undo = []; room.redo = [];
     return { room, drawer: this.setDrawer(room) };
   }
 
@@ -313,7 +339,7 @@ export class GameEngine {
         hasPassword: Boolean(room.passwordHash),
       },
       players: [...room.players.values()].map(({ userId, username, avatarId, score, ready, connected, host, hasGuessed }) => ({ userId, username, avatarId, score, ready, connected, host, hasGuessed })),
-      round: room.round, rounds: room.settings.rounds, drawerUserId: room.drawerUserId,
+      round: room.round, rounds: room.settings.rounds, turnId: room.turnId, drawerUserId: room.drawerUserId,
       deadline: room.deadline || null, strokes: room.strokes,
       choices: revealTo === room.drawerUserId ? room.choices : undefined,
     };

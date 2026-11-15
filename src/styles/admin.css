@@ -245,6 +245,8 @@
   word-break: break-all;
   margin: 0 0 8px;
 }
+.admin-file-link { display: inline-flex; align-items: center; gap: 6px; font-size: var(--text-sm); font-weight: 600; color: var(--accent); text-decoration: none; margin-bottom: 6px; }
+.admin-file-link:hover { text-decoration: underline; }
 
 .admin-mini-table { width: 100%; border-collapse: collapse; font-size: var(--text-sm); }
 .admin-mini-table th {
@@ -417,6 +419,7 @@
 .admin-report-detail { font-size: var(--text-sm); }
 .admin-report-meta { font-size: var(--text-xs); }
 .admin-report-actions { display: flex; gap: 8px; margin-top: 6px; }
+.admin-report-resolution { margin-top: 8px; padding-top: 10px; border-top: 1px solid var(--border); display: grid; gap: 4px; }
 
 /* ---------- Settings ---------- */
 
@@ -510,6 +513,8 @@
 .admin-section-title { font-family: var(--font-display); font-size: var(--text-lg); font-weight: 700; margin: 26px 0 12px; }
 .admin-mcp-banner { display: flex; align-items: flex-start; gap: 10px; margin-bottom: 16px; font-size: var(--text-sm); color: var(--text-secondary); }
 .admin-mcp-banner .accent { flex-shrink: 0; margin-top: 2px; }
+.admin-notice { display: flex; align-items: flex-start; gap: 10px; padding: 12px 14px; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--bg-subtle); font-size: var(--text-sm); color: var(--text-secondary); }
+.admin-notice .accent { flex-shrink: 0; margin-top: 2px; color: var(--accent); }
 .admin-mcp-scopes { display: flex; flex-wrap: wrap; gap: 4px; }
 .admin-mcp-scope-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
 .admin-mcp-scope-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 2px 18px; }

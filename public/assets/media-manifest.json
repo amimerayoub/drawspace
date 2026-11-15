@@ -1,0 +1,260 @@
+{
+  "generatedAt": "2026-11-15T16:50:57.175Z",
+  "assets": {
+    "/assets/achievements/challenge-master.webp": {
+      "width": 512,
+      "height": 512,
+      "widths": [
+        128,
+        256
+      ]
+    },
+    "/assets/achievements/dedicated-player.webp": {
+      "width": 512,
+      "height": 512,
+      "widths": [
+        128,
+        256
+      ]
+    },
+    "/assets/achievements/elite-player.webp": {
+      "width": 512,
+      "height": 512,
+      "widths": [
+        128,
+        256
+      ]
+    },
+    "/assets/achievements/first-guess.webp": {
+      "width": 512,
+      "height": 512,
+      "widths": [
+        128,
+        256
+      ]
+    },
+    "/assets/achievements/legend.webp": {
+      "width": 512,
+      "height": 512,
+      "widths": [
+        128,
+        256
+      ]
+    },
+    "/assets/achievements/perfect-artist.webp": {
+      "width": 512,
+      "height": 512,
+      "widths": [
+        128,
+        256
+      ]
+    },
+    "/assets/achievements/social-player.webp": {
+      "width": 512,
+      "height": 512,
+      "widths": [
+        128,
+        256
+      ]
+    },
+    "/assets/achievements/speed-legend.webp": {
+      "width": 512,
+      "height": 512,
+      "widths": [
+        128,
+        256
+      ]
+    },
+    "/assets/achievements/streak-master.webp": {
+      "width": 512,
+      "height": 512,
+      "widths": [
+        128,
+        256
+      ]
+    },
+    "/assets/achievements/winner.webp": {
+      "width": 512,
+      "height": 512,
+      "widths": [
+        128,
+        256
+      ]
+    },
+    "/assets/achievements/word-master.webp": {
+      "width": 512,
+      "height": 512,
+      "widths": [
+        128,
+        256
+      ]
+    },
+    "/assets/achievements/xp-collector.webp": {
+      "width": 512,
+      "height": 512,
+      "widths": [
+        128,
+        256
+      ]
+    },
+    "/assets/asset-preview.webp": {
+      "width": 1000,
+      "height": 1716,
+      "widths": [
+        500
+      ]
+    },
+    "/assets/avatars/avatar-comet.webp": {
+      "width": 512,
+      "height": 512,
+      "widths": [
+        128,
+        256
+      ]
+    },
+    "/assets/avatars/avatar-echo.webp": {
+      "width": 512,
+      "height": 512,
+      "widths": [
+        128,
+        256
+      ]
+    },
+    "/assets/avatars/avatar-flux.webp": {
+      "width": 512,
+      "height": 512,
+      "widths": [
+        128,
+        256
+      ]
+    },
+    "/assets/avatars/avatar-halo.webp": {
+      "width": 512,
+      "height": 512,
+      "widths": [
+        128,
+        256
+      ]
+    },
+    "/assets/avatars/avatar-nova.webp": {
+      "width": 512,
+      "height": 512,
+      "widths": [
+        128,
+        256
+      ]
+    },
+    "/assets/avatars/avatar-onyx.webp": {
+      "width": 512,
+      "height": 512,
+      "widths": [
+        128,
+        256
+      ]
+    },
+    "/assets/avatars/avatar-orbit.webp": {
+      "width": 512,
+      "height": 512,
+      "widths": [
+        128,
+        256
+      ]
+    },
+    "/assets/avatars/avatar-pixel.webp": {
+      "width": 512,
+      "height": 512,
+      "widths": [
+        128,
+        256
+      ]
+    },
+    "/assets/avatars/avatar-prism.webp": {
+      "width": 512,
+      "height": 512,
+      "widths": [
+        128,
+        256
+      ]
+    },
+    "/assets/avatars/avatar-quartz.webp": {
+      "width": 512,
+      "height": 512,
+      "widths": [
+        128,
+        256
+      ]
+    },
+    "/assets/brand/drawspace-icon.webp": {
+      "width": 1024,
+      "height": 1024,
+      "widths": [
+        64,
+        128,
+        256,
+        512
+      ]
+    },
+    "/assets/brand/drawspace-logo-horizontal.webp": {
+      "width": 1200,
+      "height": 300,
+      "widths": [
+        600
+      ]
+    },
+    "/assets/brand/drawspace-logo-light.webp": {
+      "width": 1200,
+      "height": 300,
+      "widths": [
+        600
+      ]
+    },
+    "/assets/titles/artist.webp": {
+      "width": 512,
+      "height": 512,
+      "widths": [
+        128,
+        256
+      ]
+    },
+    "/assets/titles/champion.webp": {
+      "width": 512,
+      "height": 512,
+      "widths": [
+        128,
+        256
+      ]
+    },
+    "/assets/titles/guesser.webp": {
+      "width": 512,
+      "height": 512,
+      "widths": [
+        128,
+        256
+      ]
+    },
+    "/assets/titles/legend.webp": {
+      "width": 512,
+      "height": 512,
+      "widths": [
+        128,
+        256
+      ]
+    },
+    "/assets/titles/rookie.webp": {
+      "width": 512,
+      "height": 512,
+      "widths": [
+        128,
+        256
+      ]
+    },
+    "/assets/titles/word-master.webp": {
+      "width": 512,
+      "height": 512,
+      "widths": [
+        128,
+        256
+      ]
+    }
+  }
+}

@@ -1,9 +1,10 @@
 import { db } from '@/services';
 import type { AvatarDef } from '@/types';
 import { avatarImage } from '@/data/assets';
+import { ResponsiveImage } from './ResponsiveImage';
 import { Check } from 'lucide-react';
 
-/* Avatar library. The ten generated portraits render as transparent PNGs;
+/* Avatar library. The ten generated portraits render as optimized WebP;
    legacy IDs without a generated image fall back to the geometric vector mark. */
 
 const INK = 'currentColor';
@@ -39,7 +40,7 @@ export function Avatar({ avatarId, size = 40, className = '' }: { avatarId: stri
       aria-label={def ? `${def.name} avatar` : 'Player avatar'}
     >
       {src ? (
-        <img className="avatar-img" src={src} alt="" width={size} height={size} loading="lazy" decoding="async" />
+        <ResponsiveImage className="avatar-img" src={src} alt="" width={size} height={size} />
       ) : (
         <svg viewBox="0 0 48 48" width={size} height={size} aria-hidden>
           <Shape shape={def?.shape ?? 0} />

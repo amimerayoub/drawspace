@@ -6,7 +6,7 @@ import { useI18n } from '@/i18n/I18nContext';
 import { useAuth } from '@/context/AuthContext';
 import { useToast } from '@/context/ToastContext';
 import { socketClient } from '@/services/socketClient';
-import { apiPost } from '@/services/apiClient';
+import { apiPost, ApiError } from '@/services/apiClient';
 import { DrawingCanvas } from '@/game/DrawingCanvas';
 import { ChatPanel } from '@/game/ChatPanel';
 import { PlayerList } from '@/game/PlayerList';
@@ -20,7 +20,7 @@ interface RoomSnapshot {
   status: 'waiting' | 'choosing' | 'drawing' | 'round_end' | 'finished';
   settings: { visibility: string; maxPlayers: number; rounds: number; roundSeconds: number; difficulty: string; wordMode: string; hasPassword: boolean };
   players: Array<{ userId: string; username: string; avatarId: string; score: number; ready: boolean; connected: boolean; host: boolean; hasGuessed?: boolean }>;
-  round: number; rounds: number; drawerUserId: string | null; deadline: number | null; strokes: Stroke[];
+  round: number; rounds: number; turnId: number; drawerUserId: string | null; deadline: number | null; strokes: Stroke[];
 }
 interface Choice { id: string; word: string; category: string }
 interface Standing { place: number; userId: string; username: string; avatarId: string; score: number }
@@ -35,6 +35,7 @@ export default function GameRoom() {
   const [soundOn, toggleSound] = useSoundToggle();
   const chatInputRef = useRef<HTMLInputElement>(null);
   const reportFormRef = useRef<HTMLFormElement>(null);
+  const turnIdRef = useRef(0);
   const code = (routeCode || '').toUpperCase();
   const [room, setRoom] = useState<RoomSnapshot | null>(null);
   const [phase, setPhase] = useState<'choosing' | 'drawing' | 'reveal' | 'finished'>('choosing');
@@ -44,6 +45,7 @@ export default function GameRoom() {
   const [deadline, setDeadline] = useState<number | null>(null);
   const [remaining, setRemaining] = useState(0);
   const [strokes, setStrokes] = useState<Stroke[]>([]);
+  const [turnId, setTurnId] = useState(0);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [standings, setStandings] = useState<Standing[]>([]);
   const [progressionAward, setProgressionAward] = useState<ProgressionAward | null>(null);
@@ -62,38 +64,41 @@ export default function GameRoom() {
     let active = true;
     const disposers: Array<() => void> = [];
     const addMessage = (message: Omit<ChatMessage, 'id'>) => setMessages((current) => [...current.slice(-99), { ...message, id: Date.now() + Math.random() }]);
+    const applyTurnId = (id: number) => { turnIdRef.current = id; setTurnId(id); };
+    const syncRoom = (next: RoomSnapshot) => {
+      setRoom(next); setStrokes(next.strokes || []);
+      if (typeof next.turnId === 'number') applyTurnId(next.turnId);
+      setDeadline(next.deadline);
+      if (next.status === 'waiting') navigate(path(`/room/${code}`), { replace: true });
+      else if (next.status === 'finished') setPhase('finished');
+      else if (next.status === 'drawing') setPhase('drawing');
+      else if (next.status === 'round_end') setPhase('reveal');
+      else setPhase('choosing');
+    };
+    const joinRoom = async () => {
+      const joined = await socketClient.request<{ room: RoomSnapshot }>('room:join', { code });
+      if (active) syncRoom(joined.room);
+    };
     void socketClient.connect().then(async () => {
-      disposers.push(socketClient.on<RoomSnapshot>('room:update', (next) => {
-        if (active && next.code === code) {
-          setRoom(next); setStrokes(next.strokes || []);
-          if (next.status === 'waiting') navigate(path(`/room/${code}`), { replace: true });
-          if (next.status === 'finished') setPhase('finished');
-          else if (next.status === 'drawing') setPhase('drawing');
-          else if (next.status === 'choosing') setPhase('choosing');
-        }
-      }));
+      disposers.push(socketClient.on<RoomSnapshot>('room:update', (next) => { if (active && next.code === code) syncRoom(next); }));
       disposers.push(socketClient.on<Choice[]>('game:word-choices', (items) => { if (active) { setChoices(items); setPhase('choosing'); } }));
       disposers.push(socketClient.on<{ word: string }>('game:your-word', (item) => { if (active) setAnswer(item.word); }));
-      disposers.push(socketClient.on<{ round: number; drawerUserId: string; deadline: number; wordLength: number }>('game:round-start', (item) => {
-        if (active) { setPhase('drawing'); setAnswer(null); setChoices([]); setWordLength(item.wordLength); setDeadline(item.deadline); setRemaining(Math.max(0, Math.ceil((item.deadline - Date.now()) / 1000))); setStrokes([]); }
+      disposers.push(socketClient.on<{ round: number; turnId: number; drawerUserId: string; deadline: number; wordLength: number }>('game:round-start', (item) => {
+        if (active) { applyTurnId(item.turnId); setPhase('drawing'); setAnswer(null); setChoices([]); setWordLength(item.wordLength); setDeadline(item.deadline); setRemaining(Math.max(0, Math.ceil((item.deadline - Date.now()) / 1000))); setStrokes([]); }
       }));
       disposers.push(socketClient.on<{ remainingSeconds: number; deadline: number }>('game:timer', (item) => { if (active) { setRemaining(item.remainingSeconds); setDeadline(item.deadline); } }));
-      disposers.push(socketClient.on<Stroke>('game:stroke', (stroke) => { if (active) setStrokes((current) => [...current, stroke]); }));
-      disposers.push(socketClient.on<{ strokes: Stroke[] }>('game:drawing-state', (state) => { if (active) setStrokes(state.strokes); }));
+      disposers.push(socketClient.on<{ stroke: Stroke; turnId: number }>('game:stroke', (item) => { if (active && item.turnId === turnIdRef.current) setStrokes((current) => [...current, item.stroke]); }));
+      disposers.push(socketClient.on<{ strokes: Stroke[]; turnId: number }>('game:drawing-state', (state) => { if (active && state.turnId === turnIdRef.current) setStrokes(state.strokes); }));
       disposers.push(socketClient.on<{ userId: string; username: string; text: string; at: number }>('game:chat', (message) => addMessage({ playerId: message.userId, username: message.username, text: message.text, at: message.at, kind: 'guess' })));
       disposers.push(socketClient.on<{ userId: string; username: string; points: number }>('game:correct-guess', (message) => addMessage({ playerId: message.userId, username: message.username, text: `guessed correctly (+${message.points})`, at: Date.now(), kind: 'correct' })));
-      disposers.push(socketClient.on<{ round: number; word: string; scores: Array<{ userId: string; score: number }> }>('game:round-end', (item) => { if (active) { setPhase('reveal'); setAnswer(item.word); } }));
+      disposers.push(socketClient.on<{ round: number; turnId: number; word: string; scores: Array<{ userId: string; score: number }> }>('game:round-end', (item) => { if (active) { setPhase('reveal'); setAnswer(item.word); setStrokes([]); } }));
       disposers.push(socketClient.on<{ roomCode: string; standings: Standing[] }>('game:match-end', (item) => { if (active) { setStandings(item.standings); setPhase('finished'); } }));
       disposers.push(socketClient.on<ProgressionAward>('game:progression-earned', (item) => { if (active && !item.duplicate) setProgressionAward(item); }));
+      disposers.push(socketClient.on<{ code: string; reason: string }>('room:closed', (item) => { if (active && item.code === code) { toast(item.reason, 'error'); navigate(path('/lobby'), { replace: true }); } }));
+      disposers.push(socketClient.on<{ code: string; reason: string }>('room:kicked', (item) => { if (active && item.code === code) { toast(item.reason, 'error'); navigate(path('/lobby'), { replace: true }); } }));
+      disposers.push(socketClient.onReconnect(() => { if (active) void joinRoom().catch(() => undefined); }));
       try {
-        const joined = await socketClient.request<{ room: RoomSnapshot }>('room:join', { code });
-        if (!active) return;
-        setRoom(joined.room); setStrokes(joined.room.strokes || []);
-        if (joined.room.status === 'waiting') navigate(path(`/room/${code}`), { replace: true });
-        else if (joined.room.status === 'drawing') setPhase('drawing');
-        else if (joined.room.status === 'finished') setPhase('finished');
-        else setPhase('choosing');
-        setDeadline(joined.room.deadline);
+        await joinRoom();
       } catch (error) { if (active) setLoadingError(error instanceof Error ? error.message : 'Could not join this game.'); }
     }).catch((error: unknown) => { if (active) setLoadingError(error instanceof Error ? error.message : 'Could not connect to the game server.'); });
     return () => { active = false; disposers.forEach((dispose) => dispose()); };
@@ -131,7 +136,10 @@ export default function GameRoom() {
     catch (error) { toast(error instanceof Error ? error.message : 'Word choice failed.', 'error'); }
   };
   const sendStroke = (stroke: Stroke) => {
-    void socketClient.request('game:stroke', { code, stroke }).catch((error) => toast(error instanceof Error ? error.message : 'Drawing could not be synchronized.', 'error'));
+    void socketClient.request('game:stroke', { code, stroke, turnId: turnIdRef.current }).catch((error) => {
+      if (error instanceof ApiError && error.code === 'STALE_TURN') return;
+      toast(error instanceof Error ? error.message : 'Drawing could not be synchronized.', 'error');
+    });
   };
   const sendDrawingAction = (action: 'undo' | 'redo' | 'clear') => {
     void socketClient.request(action === 'clear' ? 'game:clear' : `game:${action}`, { code }).catch((error) => toast(error instanceof Error ? error.message : 'Drawing action failed.', 'error'));
@@ -173,7 +181,7 @@ export default function GameRoom() {
           {phase === 'choosing' && !isDrawer && <div className="panel panel-pad"><Spinner label="Waiting for the drawer to choose a word…" /></div>}
           {phase === 'reveal' && answer && <div className="panel panel-pad"><p>Round complete: <strong>{answer}</strong></p></div>}
           {phase === 'finished' && <div className="panel panel-pad"><h2><Trophy size={18} /> {t('results.title')}</h2><ol>{standings.map((entry) => <li key={entry.userId}>{entry.place}. {entry.username} — {entry.score}</li>)}</ol>{progressionAward && <p className="accent">+{progressionAward.xp} XP earned · {progressionAward.totalXP} XP total</p>}<Button variant="primary" onClick={() => navigate(path('/lobby'))}>{t('results.backToLobby')}</Button></div>}
-          <div className="game-canvas-frame"><DrawingCanvas interactive={Boolean(isDrawer && phase === 'drawing')} replayStrokes={strokes} onStroke={sendStroke} onUndo={() => sendDrawingAction('undo')} onRedo={() => sendDrawingAction('redo')} onClear={() => sendDrawingAction('clear')} /></div>
+          <div className="game-canvas-frame"><DrawingCanvas interactive={Boolean(isDrawer && phase === 'drawing')} replayStrokes={strokes} resetKey={turnId} onStroke={sendStroke} onUndo={() => sendDrawingAction('undo')} onRedo={() => sendDrawingAction('redo')} onClear={() => sendDrawingAction('clear')} /></div>
         </section>
         <div className="game-side-stack">
           <div className="game-tabs" role="group" aria-label={t('game.panelTabs')}>

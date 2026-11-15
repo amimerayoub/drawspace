@@ -4,6 +4,7 @@ import { Mail, UserRound } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { useI18n } from '@/i18n/I18nContext';
 import { useToast } from '@/context/ToastContext';
+import { usePlatformConfig } from '@/context/PlatformConfigContext';
 import { Button } from '@/components/ui';
 import { SeoHead } from '@/components/SeoHead';
 import { AuthPanel, AuthTextField, AuthPasswordField, AuthError, AuthGuestButton, AuthSwitch } from '@/components/AuthPanel';
@@ -15,6 +16,7 @@ export default function SignUp() {
   const { signUp } = useAuth();
   const { toast } = useToast();
   const navigate = useNavigate();
+  const { config } = usePlatformConfig();
   const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -32,6 +34,7 @@ export default function SignUp() {
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
+    if (!config.registrationOpen) return;
     setTouched({ username: true, email: true, password: true });
     setError('');
     if (errs.username || errs.email || errs.password) return;
@@ -56,6 +59,7 @@ export default function SignUp() {
         sub={t('auth.signUpSub')}
         alt={<><AuthGuestButton /><AuthSwitch mode="up" /></>}
       >
+        {config.registrationOpen ? (
         <form className="auth-form" onSubmit={submit} noValidate>
           <AuthTextField
             id="su-name" label={t('common.username')} icon={<UserRound size={15} />}
@@ -79,6 +83,9 @@ export default function SignUp() {
             {t('auth.signUpCta')}
           </Button>
         </form>
+        ) : (
+          <p className="muted" role="status">Registration is currently closed. Please check back later.</p>
+        )}
       </AuthPanel>
     </>
   );

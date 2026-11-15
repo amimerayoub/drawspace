@@ -8,6 +8,7 @@ const envSchema = z.object({
   APPWRITE_PROJECT_ID: z.string().min(1),
   APPWRITE_API_KEY: z.string().min(1),
   DATABASE_ID: z.string().min(1).default('drawspace_db'),
+  STORAGE_BUCKET_ID: z.string().min(1).default('media'),
   FRONTEND_ORIGINS: z.string().default('http://localhost:5173,https://drawspace.cloud'),
   ROOM_STATE_DRIVER: z.enum(['memory', 'redis']).default('memory'),
   REDIS_URL: z.string().url().optional(),
@@ -29,6 +30,7 @@ export interface ServerConfig {
   appwriteProjectId: string;
   appwriteApiKey: string;
   databaseId: string;
+  storageBucketId?: string;
   frontendOrigins: string[];
   roomStateDriver: 'memory' | 'redis';
   redisUrl?: string;
@@ -63,6 +65,7 @@ export function loadConfig(environment: NodeJS.ProcessEnv = process.env): Server
     appwriteProjectId: parsed.data.APPWRITE_PROJECT_ID,
     appwriteApiKey: parsed.data.APPWRITE_API_KEY,
     databaseId: parsed.data.DATABASE_ID,
+    storageBucketId: parsed.data.STORAGE_BUCKET_ID,
     frontendOrigins: parsed.data.FRONTEND_ORIGINS.split(',').map((origin) => origin.trim()).filter(Boolean),
     roomStateDriver: parsed.data.ROOM_STATE_DRIVER,
     ...(parsed.data.REDIS_URL ? { redisUrl: parsed.data.REDIS_URL } : {}),

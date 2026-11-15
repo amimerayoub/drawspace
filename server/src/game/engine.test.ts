@@ -44,3 +44,18 @@ test('reconnection replaces stale sockets and room expiry prunes abandoned rooms
  const reconnected=await game.join(room.code,host,'new-socket');assert.equal(reconnected.reconnected,true);const stale=await game.disconnect(room.code,host.userId,'old-socket');assert.equal(stale.disconnected,false);assert.equal((await game.get(room.code)).players.get(host.userId)?.connected,true);await assert.rejects(()=>game.setReady(room.code,host.userId,false,'old-socket'),(e:GameError)=>e.code==='STALE_SOCKET');
  now+=3_000;await assert.rejects(()=>game.get(room.code),(e:GameError)=>e.code==='ROOM_NOT_FOUND');
 });
+test('round transitions clear the drawing buffer and stale-turn strokes are rejected',async()=>{
+ const game=new GameEngine(()=>10_000);const room=await game.createRoom(host,{...settings,rounds:2,visibility:'public',password:undefined},'h');
+ await game.join(room.code,guest,'g');await game.setReady(room.code,guest.userId,true);const {drawer}=await game.start(room.code,host.userId);
+ await game.setWordChoices(room.code,drawer.userId,[{id:'w1',word:'apple',category:'food'},{id:'w2',word:'pear',category:'food'}]);await game.chooseWord(room.code,drawer.userId,'w1');
+ assert.equal((await game.get(room.code)).turnId,1);
+ const stroke={id:'s1',tool:'pen' as const,color:'#111111',size:4,points:[{x:.1,y:.2}]};
+ await game.addStroke(room.code,drawer.userId,stroke,undefined,1);assert.equal((await game.get(room.code)).strokes.length,1);
+ await assert.rejects(()=>game.addStroke(room.code,drawer.userId,stroke,undefined,0),(e:GameError)=>e.code==='STALE_TURN');
+ await game.endRound(room.code);const ended=await game.get(room.code);assert.equal(ended.status,'round_end');assert.equal(ended.strokes.length,0);assert.equal(ended.undo.length,0);assert.equal(game.publicRoom(ended).turnId,1);
+ const next=await game.nextRound(room.code,host.userId);assert.equal(next.room.status,'choosing');assert.equal(next.room.strokes.length,0);
+ await game.setWordChoices(room.code,next.drawer.userId,[{id:'a',word:'tree',category:'nature'},{id:'b',word:'bird',category:'animal'}]);await game.chooseWord(room.code,next.drawer.userId,'a');
+ const round2=await game.get(room.code);assert.equal(round2.turnId,2);assert.equal(round2.strokes.length,0);
+ await assert.rejects(()=>game.addStroke(room.code,next.drawer.userId,stroke,undefined,1),(e:GameError)=>e.code==='STALE_TURN');
+ await game.addStroke(room.code,next.drawer.userId,stroke,undefined,2);assert.equal((await game.get(room.code)).strokes.length,1);
+});

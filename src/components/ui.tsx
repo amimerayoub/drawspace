@@ -350,7 +350,11 @@ export function EmptyState({ icon, title, body, action }: { icon?: ReactNode; ti
 export function Spinner({ label = 'Loading' }: { label?: string }) {
   return (
     <div className="spinner-wrap" role="status" aria-label={label}>
-      <Loader2 size={22} className="spin" />
+      <svg className="spinner" viewBox="0 0 24 24" aria-hidden>
+        <circle className="spinner-track" cx="12" cy="12" r="9" />
+        <circle className="spinner-arc" cx="12" cy="12" r="9" />
+      </svg>
+      <span className="spinner-label">{label}</span>
     </div>
   );
 }

@@ -2,7 +2,7 @@ import { Query, type AppwriteDatabase } from '../database/appwrite';
 import { RowRepository } from './rowRepository';
 import { randomUUID } from 'node:crypto';
 
-export type AdminRole = 'superadmin' | 'admin' | 'moderator' | 'content_manager' | 'analyst';
+export type AdminRole = 'superadmin' | 'admin' | 'moderator' | 'content_manager' | 'analyst' | 'support';
 
 export class AdminRoleRepository {
   private readonly rows: RowRepository;
@@ -12,7 +12,7 @@ export class AdminRoleRepository {
   async getRole(userId: string): Promise<AdminRole | null> {
     const rows = await this.rows.list([Query.equal('userId', userId), Query.equal('isActive', true), Query.limit(1)]);
     const role = rows[0]?.role;
-    return typeof role === 'string' && ['superadmin', 'admin', 'moderator', 'content_manager', 'analyst'].includes(role)
+    return typeof role === 'string' && ['superadmin', 'admin', 'moderator', 'content_manager', 'analyst', 'support'].includes(role)
       ? role as AdminRole
       : null;
   }

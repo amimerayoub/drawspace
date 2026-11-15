@@ -1,6 +1,6 @@
 import { appwriteAccount } from '@/lib/appwrite';
 
-const baseUrl = (import.meta.env.VITE_GAME_SERVER_URL || 'http://localhost:3001').replace(/\/+$/, '');
+export const baseUrl = (import.meta.env.VITE_GAME_SERVER_URL || 'http://localhost:3001').replace(/\/+$/, '');
 
 export class ApiError extends Error {
   constructor(message: string, public readonly status: number, public readonly code?: string) {

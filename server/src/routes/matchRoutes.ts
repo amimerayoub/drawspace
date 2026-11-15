@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import type { JwtVerifier } from '../auth/verifyJwt';
 import { identityFrom, requireAuth } from '../auth/middleware';
-import { requireAdmin } from '../middleware/authorize';
+import { requirePermission } from '../middleware/authorize';
 import { HttpError } from '../middleware/errors';
 import type { MatchHistoryRepository, MatchPlayerRecord } from '../repositories/matchHistoryRepository';
 import type { ProfileRepository } from '../repositories/profileRepository';
@@ -22,7 +22,7 @@ export function matchRoutes(verify: JwtVerifier, history: MatchHistoryRepository
     try { const username = z.string().trim().min(3).max(32).safeParse(req.params.username); const query = querySchema.safeParse(req.query); if (!username.success || !query.success) throw new HttpError(400, 'Invalid player history query.', 'VALIDATION_ERROR'); const profile = await profiles.findUsername(username.data); if (!profile) throw new HttpError(404, 'Player not found.', 'PROFILE_NOT_FOUND'); const result = await history.listForPlayer(profile.userId, query.data.limit, query.data.offset); res.json({ data: result.rows.map(publicPlayer), pagination: { total: result.total, limit: query.data.limit, offset: query.data.offset } }); }
     catch (error) { next(error); }
   });
-  router.get('/admin', requireAuth(verify), requireAdmin(roles, ['admin', 'superadmin']), async (req, res, next) => {
+  router.get('/admin', requireAuth(verify), requirePermission(roles, 'matches.inspect'), async (req, res, next) => {
     try { const query = querySchema.safeParse(req.query); if (!query.success) throw new HttpError(400, 'Invalid match query.', 'VALIDATION_ERROR'); const result = await history.listAll(query.data.limit, query.data.offset); const matches = await Promise.all([...new Set(result.rows.map((row) => row.matchId))].map(async (id) => history.getMatch(id))); res.json({ data: matches.filter((rows) => rows.length).map(publicMatch), pagination: { total: result.total, limit: query.data.limit, offset: query.data.offset } }); }
     catch (error) { next(error); }
   });

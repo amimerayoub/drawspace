@@ -13,7 +13,7 @@ async function main() {
   const config = loadConfig();
   const database = createAppwriteDatabase(config);
   const stateStore = config.roomStateDriver === 'redis' ? await connectRedis(config.redisUrl) : new InMemoryRoomStateStore();
-  const { app, game, verify, repositories } = createApp({ config, database, roomStateStore: stateStore });
+  const { app, game, verify, repositories, roomAdmin } = createApp({ config, database, roomStateStore: stateStore });
   const httpServer = createServer(app);
   const io = new SocketServer(httpServer, {
     cors: { origin: config.frontendOrigins, credentials: true },
@@ -26,7 +26,8 @@ async function main() {
     io.adapter(createAdapter(redis.pub as never, redis.sub as never));
     io.engine.on('connection_error', () => console.error('[socket.io] connection error'));
   }
-  await createSocketHandlers(io, { verify, game, profiles: repositories.profiles, wordsDatabase: database, gameSettings: repositories.gameSettings, stateStore });
+  const broadcaster = await createSocketHandlers(io, { verify, game, profiles: repositories.profiles, wordsDatabase: database, gameSettings: repositories.gameSettings, stateStore });
+  roomAdmin.setBroadcaster(broadcaster);
   await new Promise<void>((resolve, reject) => {
     httpServer.once('error', reject);
     httpServer.listen(config.port, '0.0.0.0', resolve);

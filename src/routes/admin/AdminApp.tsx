@@ -8,6 +8,7 @@ import {
 import { useAuth } from '@/context/AuthContext';
 import { useTheme } from '@/theme/ThemeContext';
 import { Avatar } from '@/components/Avatar';
+import { ResponsiveImage } from '@/components/ResponsiveImage';
 import { BRAND } from '@/data/assets';
 import { Badge, Button, IconButton } from '@/components/ui';
 import { NoAccess, useAdmin } from './shared';
@@ -24,6 +25,7 @@ const AchievementsAdmin = lazy(() => import('./AchievementsAdmin'));
 const ChallengesAdmin = lazy(() => import('./ChallengesAdmin'));
 const XpConfig = lazy(() => import('./XpConfig'));
 const BlogAdmin = lazy(() => import('./BlogAdmin'));
+const BlogStudio = lazy(() => import('./BlogStudio'));
 const Seo = lazy(() => import('./Seo'));
 const Ads = lazy(() => import('./Ads'));
 const Media = lazy(() => import('./Media'));
@@ -130,7 +132,7 @@ export default function AdminApp() {
       <aside className={`admin-sidebar ${menuOpen ? 'open' : ''}`}>
         <div className="admin-side-head">
           <Link to="/admin" className="logo" onClick={() => setMenuOpen(false)}>
-            <img className="logo-mark" src={BRAND.icon} alt="" width={26} height={26} />
+            <ResponsiveImage className="logo-mark" src={BRAND.icon} alt="" width={26} height={26} eager />
             <span className="logo-word">DrawSpace</span>
             <Badge tone="outline">admin</Badge>
           </Link>
@@ -189,6 +191,8 @@ export default function AdminApp() {
             <Route path="challenges" element={<Gate perm="challenges.manage"><ChallengesAdmin /></Gate>} />
             <Route path="xp" element={<Gate perm="config.xp"><XpConfig /></Gate>} />
             <Route path="blog" element={<Gate perm="content.blog"><BlogAdmin /></Gate>} />
+            <Route path="blog/studio" element={<Gate perm="content.blog"><BlogStudio /></Gate>} />
+            <Route path="blog/studio/:id" element={<Gate perm="content.blog"><BlogStudio /></Gate>} />
             <Route path="seo" element={<Gate perm="content.seo"><Seo /></Gate>} />
             <Route path="ads" element={<Gate perm="content.ads"><Ads /></Gate>} />
             <Route path="media" element={<Gate perm="content.media"><Media /></Gate>} />

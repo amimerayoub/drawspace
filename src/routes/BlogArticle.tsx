@@ -7,6 +7,9 @@ import { BlogCover } from '@/components/BlogCover';
 import { AdSlot } from '@/components/AdSlot';
 import { Badge, EmptyState, Spinner } from '@/components/ui';
 import { SeoHead } from '@/components/SeoHead';
+import { docToPlainText, parseDoc } from '@/studio/types';
+import { StudioContent } from '@/studio/blocks';
+import { CustomCodeSection } from '@/studio/StudioArticle';
 
 export default function BlogArticle() {
   const { t, path, formatDate } = useI18n();
@@ -29,12 +32,20 @@ export default function BlogArticle() {
     );
   }
 
-  const paragraphs = article.content.split(/\n\s*\n/).map((p) => p.trim()).filter(Boolean);
-  const minutes = Math.max(2, Math.round(paragraphs.join(' ').split(/\s+/).length / 180));
+  const studio = parseDoc(article.studioDoc || article.content);
+  const wordSource = studio ? docToPlainText(studio) : article.content;
+  const minutes = Math.max(2, Math.round(wordSource.split(/\s+/).filter(Boolean).length / 180));
+  const relatedItems = related.map((a) => ({ slug: a.slug, title: a.title, publishedAt: a.publishedAt }));
 
   return (
     <div className="page">
-      <SeoHead title={`${article.seoTitle || article.title} · DrawSpace`} description={article.seoDescription || article.excerpt} />
+      <SeoHead
+        title={`${article.seoTitle || article.title} · DrawSpace`}
+        description={article.seoDescription || article.excerpt}
+        type="article"
+        image={studio?.meta?.ogImage || article.cover || undefined}
+        canonical={studio?.meta?.canonical || undefined}
+      />
       <article className="container container-narrow article">
         <Link to={path('/blog')} className="article-back faint">
           <ArrowLeft size={14} aria-hidden /> {t('blog.back')}
@@ -47,9 +58,18 @@ export default function BlogArticle() {
         <h1 className="article-title">{article.title}</h1>
         <p className="article-excerpt muted">{article.excerpt}</p>
         <BlogCover cover={article.cover} title={article.title} />
-        <div className="article-body">
-          {paragraphs.map((p, i) => <p key={i}>{p}</p>)}
-        </div>
+        {studio ? (
+          <div className="article-body article-body-studio">
+            <CustomCodeSection code={studio.code} runScripts position="header" />
+            <StudioContent doc={studio} related={relatedItems} pathFor={path} />
+            <CustomCodeSection code={studio.code} runScripts position="body" />
+            <CustomCodeSection code={studio.code} runScripts position="footer" />
+          </div>
+        ) : (
+          <div className="article-body">
+            {article.content.split(/\n\s*\n/).map((p) => p.trim()).filter(Boolean).map((p, i) => <p key={i}>{p}</p>)}
+          </div>
+        )}
         <div className="article-tags">
           {article.tags.map((tag) => <Badge key={tag}>{tag}</Badge>)}
         </div>

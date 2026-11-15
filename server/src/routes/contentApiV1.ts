@@ -2,15 +2,15 @@ import express, { Router, type Request, type Response } from 'express';
 import { z } from 'zod';
 import type { JwtVerifier } from '../auth/verifyJwt';
 import { identityFrom, requireAuth } from '../auth/middleware';
-import { requireAdmin } from '../middleware/authorize';
+import { requireAnyPermission } from '../middleware/authorize';
 import { HttpError } from '../middleware/errors';
 import { rateLimit } from '../middleware/rateLimit';
 import type { AdminRoleRepository } from '../repositories/adminRoleRepository';
 import { BlogService, BLOG_STATUSES, type BlogInput } from '../content/blogService';
 import { WordService, WORD_DIFFICULTIES, WORD_LANGUAGES, type BulkStrategy, type WordInput } from '../content/wordService';
+import { TemplateService, type TemplateRecord } from '../content/templateService';
+import { STUDIO_DOC_MAX, STUDIO_JS_ROLES, STUDIO_SENTINEL, studioToObject } from '../content/studioContent';
 import { buildBlogsExport, buildCategoriesExport, buildWordsExport, collectPages, detectImportFormat, parseBlogsImport, parseWordsImport, type ExportFile } from '../content/importExport';
-
-const editors = ['superadmin', 'admin', 'content_manager'] as const;
 
 const wordCreateSchema = z.object({
   id: z.string().min(1).max(64).optional(),
@@ -27,7 +27,7 @@ const blogCreateSchema = z.object({
   title: z.string().min(1).max(300),
   slug: z.string().max(80).optional(),
   excerpt: z.string().max(600).optional(),
-  content: z.string().min(1).max(12000),
+  content: z.string().min(1).max(STUDIO_DOC_MAX),
   category: z.string().max(80).optional(),
   tags: z.array(z.string().max(40)).max(12).optional(),
   status: z.enum(['draft', 'published', 'scheduled', 'archived']).optional(),
@@ -43,6 +43,12 @@ const bulkWordsSchema = z.object({ words: z.array(wordCreateSchema).min(1).max(5
 const bulkActiveSchema = z.object({ ids: z.array(z.string().min(1).max(64)).min(1).max(500), active: z.boolean(), confirm: z.literal(true) }).strict();
 const bulkDeleteSchema = z.object({ ids: z.array(z.string().min(1).max(64)).min(1).max(500), confirm: z.literal(true) }).strict();
 const categorySchema = z.object({ name: z.string().min(1).max(64) }).strict();
+const templateCreateSchema = z.object({
+  name: z.string().min(1).max(64),
+  description: z.string().max(255).optional(),
+  doc: z.record(z.string(), z.unknown()),
+}).strict();
+const templateJson = (record: TemplateRecord) => ({ ...record, doc: studioToObject(record.doc) ?? {} });
 const importSchema = z.object({
   content: z.string().min(1).max(3_000_000),
   filename: z.string().max(255).optional(),
@@ -117,10 +123,12 @@ const sendExport = (response: Response, file: ExportFile) => {
   response.send(file.body);
 };
 
-export function contentApiV1Routes(verify: JwtVerifier, roles: AdminRoleRepository, words: WordService, blogs: BlogService): Router {
+export function contentApiV1Routes(verify: JwtVerifier, roles: AdminRoleRepository, words: WordService, blogs: BlogService, templates: TemplateService): Router {
   const router = Router();
   const admin = requireAuth(verify);
-  const editorAccess = requireAdmin(roles, [...editors]);
+  const editorAccess = requireAnyPermission(roles, ['words.manage', 'content.blog']);
+  // Studio documents can be large; blog writes get a dedicated bigger parser.
+  const blogBody = express.json({ limit: '2mb', strict: true });
 
   router.get('/blogs', async (request, response, next) => {
     try {
@@ -163,6 +171,30 @@ export function contentApiV1Routes(verify: JwtVerifier, roles: AdminRoleReposito
 
   const adminRouter = Router();
   adminRouter.use(admin, editorAccess);
+  adminRouter.use('/blogs', blogBody);
+  adminRouter.use('/blog-templates', blogBody);
+
+  adminRouter.get('/blog-studio/config', async (_request, response, next) => {
+    try {
+      const actor = actorFrom(_request, response);
+      response.json({ data: { contentLimit: await blogs.contentLimit(), studioLimit: await blogs.studioLimit(), canUseCustomJs: STUDIO_JS_ROLES.includes(actor.role), templatesAvailable: await templates.isAvailable() } });
+    } catch (error) { next(error); }
+  });
+
+  adminRouter.get('/blog-templates', async (_request, response, next) => {
+    try { response.json({ data: (await templates.list()).map(templateJson) }); } catch (error) { next(error); }
+  });
+  adminRouter.post('/blog-templates', async (request, response, next) => {
+    try {
+      const input = parse(templateCreateSchema, request.body, 'template');
+      const serialized = `${STUDIO_SENTINEL}\n${JSON.stringify(input.doc)}`;
+      const record = await templates.create({ name: input.name, description: input.description, doc: serialized }, actorFrom(request, response));
+      response.status(201).json({ data: templateJson(record) });
+    } catch (error) { next(error); }
+  });
+  adminRouter.delete('/blog-templates/:id', async (request, response, next) => {
+    try { parse(deleteConfirmSchema, request.body, 'delete confirmation'); await templates.delete(param(request, 'id'), actorFrom(request, response)); response.json({ data: { deleted: true } }); } catch (error) { next(error); }
+  });
 
   adminRouter.get('/blogs/stats', async (_request, response, next) => { try { response.json({ data: await blogs.stats() }); } catch (error) { next(error); } });
   adminRouter.get('/blogs/categories', async (_request, response, next) => { try { response.json({ data: await blogs.listCategories() }); } catch (error) { next(error); } });

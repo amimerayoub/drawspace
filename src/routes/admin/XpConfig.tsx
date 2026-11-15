@@ -1,91 +1,116 @@
-import { useState } from 'react';
-import { Save } from 'lucide-react';
-import type { XpConfig as XpConfigType } from '@/types';
-import { useDb } from '@/hooks/useDb';
+import { useCallback, useEffect, useState } from 'react';
+import { RotateCw, Save } from 'lucide-react';
+import type { XpSettings } from '@/types';
 import { useToast } from '@/context/ToastContext';
-import { adminService, levelForXp } from '@/services';
-import { commit } from '@/services/db';
-import { Button, Input } from '@/components/ui';
-import { AdminPage, FieldRow, useAdmin } from './shared';
-import { UnavailableFeature } from './UnavailableFeature';
+import { backendAdminService } from '@/services/backendAdmin.service';
+import { Button, Input, Spinner } from '@/components/ui';
+import { AdminPage, FieldRow } from './shared';
+
+const levelFor = (totalXp: number, base: number, growth: number) => {
+  let level = 1;
+  let remaining = Math.max(0, totalXp);
+  let needed = base;
+  while (remaining >= needed && level < 99) { remaining -= needed; level += 1; needed = Math.round(base * growth ** (level - 1)); }
+  return level;
+};
+const previewXp = [0, 100, 500, 1500, 5000, 12000];
 
 export default function XpConfig() {
-  return <UnavailableFeature title="XP configuration" explanation="There is no production XP configuration table. Match XP rules are server-owned; this demo editor is disabled." />;
-  const db = useDb();
-  const { name } = useAdmin();
   const { toast } = useToast();
-  const [form, setForm] = useState<XpConfigType>({ ...db.xpConfig });
+  const [form, setForm] = useState<XpSettings | null>(null);
+  const [error, setError] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
 
-  const num = (key: keyof XpConfigType, min: number, max: number, step = 1) => ({
+  const load = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      setForm(await backendAdminService.xpConfig());
+      setError('');
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'XP configuration could not be loaded.');
+    } finally {
+      setRefreshing(false);
+    }
+  }, []);
+  useEffect(() => { void load(); }, [load]);
+
+  const num = (key: keyof XpSettings, min: number, max: number, step = 1) => ({
     type: 'number' as const,
     min, max, step,
-    value: form[key],
+    value: form ? form[key] : 0,
+    disabled: !form || saving,
     onChange: (e: React.ChangeEvent<HTMLInputElement>) => {
-      const v = Number(e.target.value);
-      if (Number.isFinite(v)) setForm({ ...form, [key]: Math.min(max, Math.max(min, v)) });
+      const value = Number(e.target.value);
+      if (form && Number.isFinite(value)) setForm({ ...form, [key]: Math.min(max, Math.max(min, value)) });
     },
   });
 
-  const save = () => {
-    if (form.levelGrowth < 1) { toast('Level growth must be at least 1.', 'error'); return; }
-    adminService.audit(name, 'config.xp', 'xp', JSON.stringify(db.xpConfig), JSON.stringify(form));
-    Object.assign(db.xpConfig, form);
-    commit();
-    toast('XP configuration saved.', 'success');
+  const save = async () => {
+    if (!form) return;
+    setSaving(true);
+    try {
+      setForm(await backendAdminService.saveXpConfig(form));
+      toast('XP configuration saved. Applies to future matches and claims.', 'success');
+    } catch (e) {
+      toast(e instanceof Error ? e.message : 'XP configuration could not be saved.', 'error');
+    } finally {
+      setSaving(false);
+    }
   };
-
-  const previewXp = [0, 100, 500, 1500, 5000, 12000];
 
   return (
     <AdminPage
       title="XP configuration"
-      sub="Rewards and the level curve. Changes apply to future matches and claims."
-      actions={<Button variant="primary" icon={<Save size={15} />} onClick={save}>Save changes</Button>}
+      sub="Match rewards and the level curve used by the game server. Changes apply to future matches and claims."
+      actions={<>
+        <Button variant="secondary" icon={<RotateCw size={15} />} loading={refreshing} onClick={() => void load()}>Refresh</Button>
+        <Button variant="primary" icon={<Save size={15} />} loading={saving} disabled={!form} onClick={() => void save()}>Save changes</Button>
+      </>}
     >
-      <div className="admin-grid-2">
-        <div className="panel panel-pad">
-          <h2 className="admin-panel-title">Rewards</h2>
-          <FieldRow label="Correct guess" hint="Base XP for guessing the word.">
-            <Input {...num('correctGuess', 0, 200)} />
-          </FieldRow>
-          <FieldRow label="First guess bonus" hint="Extra XP for the first correct guess each round.">
-            <Input {...num('firstGuessBonus', 0, 200)} />
-          </FieldRow>
-          <FieldRow label="Drawing, per correct guess" hint="XP the drawer earns each time someone guesses.">
-            <Input {...num('drawingPerGuess', 0, 200)} />
-          </FieldRow>
-          <FieldRow label="Match win bonus">
-            <Input {...num('winBonus', 0, 500)} />
-          </FieldRow>
-          <FieldRow label="Challenge multiplier" hint="Scales challenge rewards.">
-            <Input {...num('challengeMultiplier', 0.5, 5, 0.25)} />
-          </FieldRow>
-        </div>
-        <div className="panel panel-pad">
-          <h2 className="admin-panel-title">Level curve</h2>
-          <FieldRow label="Base XP for level 2">
-            <Input {...num('levelBase', 10, 5000)} />
-          </FieldRow>
-          <FieldRow label="Growth factor" hint="Each level needs this times more XP than the last.">
-            <Input {...num('levelGrowth', 1, 2, 0.01)} />
-          </FieldRow>
-          <div className="admin-xp-preview">
-            <p className="admin-form-label">Curve preview</p>
-            <table className="admin-mini-table">
-              <thead><tr><th>Total XP</th><th>Level with current curve</th></tr></thead>
-              <tbody>
-                {previewXp.map((xp) => (
-                  <tr key={xp}>
-                    <td className="mono">{xp.toLocaleString()}</td>
-                    <td className="mono">{levelForXp(xp).level}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            <p className="faint admin-field-hint">Preview uses the saved curve. Save to see your changes here.</p>
+      {error && <p role="alert" className="muted">{error}</p>}
+      {!form && !error && <div className="page"><Spinner /></div>}
+
+      {form && (
+        <div className="admin-grid-2">
+          <div className="panel panel-pad">
+            <h2 className="admin-panel-title">Rewards</h2>
+            <FieldRow label="Correct guess XP" hint="XP per correct guess, awarded when a match finishes.">
+              <Input {...num('correctGuessXp', 0, 200)} />
+            </FieldRow>
+            <FieldRow label="Match win bonus" hint="Extra XP for the player who finishes first.">
+              <Input {...num('winBonusXp', 0, 500)} />
+            </FieldRow>
+            <FieldRow label="Challenge multiplier" hint="Scales XP granted when a challenge is claimed.">
+              <Input {...num('challengeMultiplier', 0.5, 5, 0.25)} />
+            </FieldRow>
+          </div>
+          <div className="panel panel-pad">
+            <h2 className="admin-panel-title">Level curve</h2>
+            <FieldRow label="Base XP for level 2">
+              <Input {...num('levelBase', 10, 5000)} />
+            </FieldRow>
+            <FieldRow label="Growth factor" hint="Each level needs this times more XP than the last.">
+              <Input {...num('levelGrowth', 1, 2, 0.01)} />
+            </FieldRow>
+            <div className="admin-xp-preview">
+              <p className="admin-form-label">Curve preview</p>
+              <table className="admin-mini-table">
+                <thead><tr><th>Total XP</th><th>Level with these settings</th></tr></thead>
+                <tbody>
+                  {previewXp.map((xp) => (
+                    <tr key={xp}>
+                      <td className="mono">{xp.toLocaleString()}</td>
+                      <td className="mono">{levelFor(xp, form.levelBase, form.levelGrowth)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <p className="faint admin-field-hint">Preview updates as you edit. Save to apply it to the game server.</p>
+            </div>
           </div>
         </div>
-      </div>
+      )}
     </AdminPage>
   );
 }

@@ -2,7 +2,7 @@ import { Router, type Request, type Response } from 'express';
 import { z } from 'zod';
 import type { JwtVerifier } from '../auth/verifyJwt';
 import { identityFrom, requireAuth } from '../auth/middleware';
-import { requireAdmin } from '../middleware/authorize';
+import { requirePermission } from '../middleware/authorize';
 import { HttpError } from '../middleware/errors';
 import { Query } from '../database/appwrite';
 import type { AppwriteDatabase } from '../database/appwrite';
@@ -11,8 +11,6 @@ import { RowRepository } from '../repositories/rowRepository';
 import { McpKeyService } from '../mcp/keyService';
 import { MCP_SCOPES, isMcpScope } from '../mcp/scopes';
 import { MCP_TOOL_NAMES } from '../mcp/tools';
-
-const keyManagers = ['superadmin', 'admin'] as const;
 
 const createSchema = z.object({
   name: z.string().min(1).max(64),
@@ -35,7 +33,7 @@ const parse = <T>(schema: z.ZodType<T>, body: unknown, label: string): T => {
 
 export function mcpAdminApiV1Routes(verify: JwtVerifier, roles: AdminRoleRepository, keys: McpKeyService, database: AppwriteDatabase): Router {
   const router = Router();
-  router.use(requireAuth(verify), requireAdmin(roles, [...keyManagers]));
+  router.use(requireAuth(verify), requirePermission(roles, 'settings.manage'));
   const audit = new RowRepository(database, 'audit_logs');
 
   router.get('/status', async (_request, response, next) => {

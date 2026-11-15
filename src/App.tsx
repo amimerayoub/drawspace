@@ -3,6 +3,7 @@ import { Navigate, Outlet, Route, Routes } from 'react-router-dom';
 import { I18nProvider, LOCALES, DEFAULT_LOCALE, useI18n } from '@/i18n/I18nContext';
 import type { Locale } from '@/types';
 import { useAuth } from '@/context/AuthContext';
+import { usePlatformConfig } from '@/context/PlatformConfigContext';
 import { Header } from '@/components/Header';
 import { Footer } from '@/components/Footer';
 import { Spinner } from '@/components/ui';
@@ -35,11 +36,26 @@ function LocaleLayout({ locale }: { locale: Locale }) {
   );
 }
 
+function MaintenanceScreen() {
+  const { config } = usePlatformConfig();
+  return (
+    <div className="page container container-narrow" role="status">
+      <h1>{config.siteName}</h1>
+      <p className="muted">We are performing scheduled maintenance. Please check back shortly.</p>
+    </div>
+  );
+}
+
 function PublicLayout() {
+  const { config } = usePlatformConfig();
+  if (config.maintenance) return <MaintenanceScreen />;
   return (
     <div className="app-shell">
       <a href="#main" className="skip-link">Skip to content</a>
       <Header />
+      {config.announcement && (
+        <div role="status" style={{ background: 'var(--cyan, #06b6d4)', color: '#04252b', textAlign: 'center', padding: '8px 16px', fontSize: '14px', fontWeight: 600 }}>{config.announcement}</div>
+      )}
       <main id="main">
         <Outlet />
       </main>

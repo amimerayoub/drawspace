@@ -1,69 +1,89 @@
-import { useState } from 'react';
-import { Pencil, Plus, Save, Trash2 } from 'lucide-react';
+import { useCallback, useEffect, useState } from 'react';
+import { ExternalLink, Pencil, Plus, RotateCw, Save, Trash2 } from 'lucide-react';
 import type { RedirectRule, SeoRecord } from '@/types';
-import { useDb } from '@/hooks/useDb';
 import { useToast } from '@/context/ToastContext';
-import { adminService } from '@/services';
-import { uid } from '@/services/db';
-import { Badge, Button, ConfirmDialog, Field, Input, Modal, NativeSelect, Tabs, Textarea } from '@/components/ui';
+import { backendAdminService } from '@/services/backendAdmin.service';
+import { baseUrl } from '@/services/apiClient';
+import { Badge, Button, ConfirmDialog, Field, Input, Modal, NativeSelect, Spinner, Tabs, Textarea } from '@/components/ui';
 import { DataTable, type Column } from '@/components/DataTable';
-import { AdminPage, useAdmin } from './shared';
-import { UnavailableFeature } from './UnavailableFeature';
+import { AdminPage, NoAccess, useAdmin } from './shared';
 
 const emptySeo: SeoRecord = { route: '', title: '', description: '', canonical: '', ogTitle: '', ogDescription: '', robots: 'index', structuredData: '' };
 
 export default function Seo() {
-  return <UnavailableFeature title="SEO & redirects" explanation="The inspected schema has no SEO or redirect tables. Local demo metadata and redirect changes are disabled." />;
-  const db = useDb();
-  const { name } = useAdmin();
+  const { can } = useAdmin();
   const { toast } = useToast();
   const [tab, setTab] = useState('pages');
+  const [records, setRecords] = useState<SeoRecord[]>([]);
+  const [redirects, setRedirects] = useState<RedirectRule[]>([]);
+  const [error, setError] = useState('');
+  const [refreshing, setRefreshing] = useState(false);
   const [editing, setEditing] = useState<SeoRecord | 'new' | null>(null);
   const [form, setForm] = useState<SeoRecord>(emptySeo);
   const [redirect, setRedirect] = useState<RedirectRule | 'new' | null>(null);
   const [rForm, setRForm] = useState({ from: '', to: '', code: 301 as 301 | 302 });
   const [deletingRedirect, setDeletingRedirect] = useState<RedirectRule | null>(null);
+  const [deletingSeo, setDeletingSeo] = useState<SeoRecord | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [formError, setFormError] = useState('');
 
-  const openSeo = (r: SeoRecord | 'new') => {
-    setForm(r === 'new' ? { ...emptySeo, canonical: 'https://drawspace.cloud/' } : { ...r });
-    setEditing(r);
+  const load = useCallback(async () => {
+    setRefreshing(true);
+    try { const [seo, rd] = await Promise.all([backendAdminService.seo(), backendAdminService.redirects()]); setRecords(seo); setRedirects(rd); setError(''); }
+    catch (e) { setError(e instanceof Error ? e.message : 'SEO data could not be loaded.'); }
+    finally { setRefreshing(false); }
+  }, []);
+  useEffect(() => { void load(); }, [load]);
+
+  if (!can('content.seo')) return <NoAccess />;
+
+  const openSeo = (r: SeoRecord | 'new') => { setForm(r === 'new' ? { ...emptySeo, canonical: `${baseUrl}/` } : { ...r }); setFormError(''); setEditing(r); };
+  const openRedirect = (r: RedirectRule | 'new') => { setRForm(r === 'new' ? { from: '', to: '', code: 301 } : { from: r.from, to: r.to, code: r.code }); setFormError(''); setRedirect(r); };
+
+  const saveSeo = async () => {
+    if (!form.route.trim().startsWith('/')) { setFormError('Route must start with /.'); return; }
+    if (!form.title.trim() || !form.description.trim()) { setFormError('Title and description are required.'); return; }
+    if (form.structuredData.trim()) { try { JSON.parse(form.structuredData); } catch { setFormError('Structured data is not valid JSON.'); return; } }
+    setBusy(true); setFormError('');
+    try { await backendAdminService.saveSeo({ ...form, route: form.route.trim() }); await load(); toast('SEO record saved.', 'success'); setEditing(null); }
+    catch (e) { setFormError(e instanceof Error ? e.message : 'SEO record could not be saved.'); }
+    finally { setBusy(false); }
   };
 
-  const saveSeo = () => {
-    if (!form.route.trim().startsWith('/')) { toast('Route must start with /.', 'error'); return; }
-    if (!form.title.trim() || !form.description.trim()) { toast('Title and description are required.', 'error'); return; }
-    if (form.structuredData.trim()) {
-      try { JSON.parse(form.structuredData); } catch { toast('Structured data is not valid JSON.', 'error'); return; }
-    }
-    adminService.saveSeo({ ...form, route: form.route.trim() }, name);
-    toast('SEO record saved.', 'success');
-    setEditing(null);
+  const saveRedirect = async () => {
+    if (!rForm.from.startsWith('/') || !rForm.to.startsWith('/')) { setFormError('Both paths must start with /.'); return; }
+    setBusy(true); setFormError('');
+    try { await backendAdminService.saveRedirect({ id: redirect === 'new' ? undefined : (redirect as RedirectRule).id, from: rForm.from.trim(), to: rForm.to.trim(), code: rForm.code }); await load(); toast('Redirect saved.', 'success'); setRedirect(null); }
+    catch (e) { setFormError(e instanceof Error ? e.message : 'Redirect could not be saved.'); }
+    finally { setBusy(false); }
   };
 
-  const openRedirect = (r: RedirectRule | 'new') => {
-    setRForm(r === 'new' ? { from: '', to: '', code: 301 } : { from: r.from, to: r.to, code: r.code });
-    setRedirect(r);
+  const removeRedirect = async () => {
+    if (!deletingRedirect) return;
+    try { await backendAdminService.deleteRedirect(deletingRedirect.id); await load(); toast('Redirect deleted.', 'success'); }
+    catch (e) { toast(e instanceof Error ? e.message : 'Redirect could not be deleted.', 'error'); }
+    setDeletingRedirect(null);
   };
-
-  const saveRedirect = () => {
-    if (!rForm.from.startsWith('/') || !rForm.to.startsWith('/')) { toast('Both paths must start with /.', 'error'); return; }
-    adminService.saveRedirect({
-      id: redirect === 'new' ? uid('rd') : (redirect as RedirectRule).id,
-      from: rForm.from.trim(), to: rForm.to.trim(), code: rForm.code,
-      hits: redirect === 'new' ? 0 : (redirect as RedirectRule).hits,
-    }, name);
-    toast('Redirect saved.', 'success');
-    setRedirect(null);
+  const removeSeo = async () => {
+    if (!deletingSeo) return;
+    try { await backendAdminService.deleteSeo(deletingSeo.route); await load(); toast('SEO record deleted.', 'success'); }
+    catch (e) { toast(e instanceof Error ? e.message : 'SEO record could not be deleted.', 'error'); }
+    setDeletingSeo(null);
   };
 
   const seoColumns: Column<SeoRecord>[] = [
     { key: 'route', header: 'Route', width: '16%', render: (r) => <span className="mono">{r.route}</span>, sortValue: (r) => r.route },
-    { key: 'title', header: 'Title', width: '28%', render: (r) => <span className="admin-user-name">{r.title}</span>, sortValue: (r) => r.title },
+    { key: 'title', header: 'Title', width: '26%', render: (r) => <span className="admin-user-name">{r.title}</span>, sortValue: (r) => r.title },
     { key: 'description', header: 'Description', render: (r) => <span className="muted admin-clamp">{r.description}</span> },
     { key: 'robots', header: 'Robots', render: (r) => <Badge tone={r.robots === 'index' ? 'neutral' : 'outline'}>{r.robots}</Badge>, sortValue: (r) => r.robots },
     {
-      key: 'actions', header: '', align: 'end', width: '70px',
-      render: (r) => <Button size="sm" variant="ghost" icon={<Pencil size={13} />} onClick={() => openSeo(r)} aria-label={`Edit SEO for ${r.route}`} />,
+      key: 'actions', header: '', align: 'end', width: '110px',
+      render: (r) => (
+        <span className="admin-row-actions">
+          <Button size="sm" variant="ghost" icon={<Pencil size={13} />} onClick={() => openSeo(r)} aria-label={`Edit SEO for ${r.route}`} />
+          <Button size="sm" variant="ghost" icon={<Trash2 size={14} />} onClick={() => setDeletingSeo(r)} aria-label={`Delete SEO for ${r.route}`} />
+        </span>
+      ),
     },
   ];
 
@@ -83,45 +103,57 @@ export default function Seo() {
     },
   ];
 
+  const noindex = records.filter((s) => s.robots === 'noindex').map((s) => s.route);
+  const robotsPreview = `User-agent: *\n${noindex.length ? `Disallow: ${noindex.join(', ')}` : 'Allow: /'}\nSitemap: ${baseUrl}/sitemap.xml`;
+  const sitemapPreview = records.filter((s) => s.robots === 'index').map((s) => s.canonical || `${baseUrl}${s.route}`).join('\n');
+
   return (
-    <AdminPage title="SEO" sub="Metadata per route, redirect rules, and crawler files.">
+    <AdminPage
+      title="SEO"
+      sub="Metadata per route, redirect rules, and crawler files. Served live from the production database."
+      actions={<Button variant="secondary" icon={<RotateCw size={15} />} loading={refreshing} onClick={() => void load()}>Refresh</Button>}
+    >
+      {error && <p role="alert" className="muted">{error}</p>}
       <Tabs
-        tabs={[{ id: 'pages', label: 'Page metadata', count: db.seo.length }, { id: 'redirects', label: 'Redirects', count: db.redirects.length }, { id: 'files', label: 'Crawler files' }]}
+        tabs={[{ id: 'pages', label: 'Page metadata', count: records.length }, { id: 'redirects', label: 'Redirects', count: redirects.length }, { id: 'files', label: 'Crawler files' }]}
         active={tab} onChange={setTab} label="SEO sections"
       />
+      {refreshing && records.length === 0 && redirects.length === 0 && <div className="page"><Spinner /></div>}
       {tab === 'pages' && (
         <div className="panel">
-          <DataTable columns={seoColumns} rows={db.seo} rowKey={(r) => r.route}
+          <DataTable columns={seoColumns} rows={records} rowKey={(r) => r.route}
             toolbar={<Button size="sm" variant="secondary" icon={<Plus size={14} />} onClick={() => openSeo('new')}>Add route</Button>}
-            emptyTitle="No routes configured" />
+            emptyTitle="No routes configured" emptyBody="Add page metadata to control titles, descriptions, and indexing." />
         </div>
       )}
       {tab === 'redirects' && (
         <div className="panel">
-          <DataTable columns={redirectColumns} rows={db.redirects} rowKey={(r) => r.id}
+          <DataTable columns={redirectColumns} rows={redirects} rowKey={(r) => r.id}
             toolbar={<Button size="sm" variant="secondary" icon={<Plus size={14} />} onClick={() => openRedirect('new')}>Add redirect</Button>}
-            emptyTitle="No redirects" />
+            emptyTitle="No redirects" emptyBody="Redirect rules are resolved by the client router from /api/redirects." />
         </div>
       )}
       {tab === 'files' && (
         <div className="admin-grid-2">
           <div className="panel panel-pad">
             <h2 className="admin-panel-title">robots.txt</h2>
-            <pre className="admin-code-block mono">{`User-agent: *\n${db.seo.some((s) => s.robots === 'noindex') ? `Disallow: ${db.seo.filter((s) => s.robots === 'noindex').map((s) => s.route).join(', ')}` : 'Allow: /'}\nSitemap: https://drawspace.cloud/sitemap.xml`}</pre>
+            <pre className="admin-code-block mono">{robotsPreview}</pre>
+            <a className="admin-file-link" href={`${baseUrl}/robots.txt`} target="_blank" rel="noreferrer"><ExternalLink size={13} aria-hidden /> Open live robots.txt</a>
             <p className="faint admin-field-hint">Generated from the robots setting on each route.</p>
           </div>
           <div className="panel panel-pad">
             <h2 className="admin-panel-title">sitemap.xml</h2>
-            <pre className="admin-code-block mono">{db.seo.filter((s) => s.robots === 'index').map((s) => s.canonical || `https://drawspace.cloud${s.route}`).join('\n')}</pre>
+            <pre className="admin-code-block mono">{sitemapPreview || 'No indexable routes yet.'}</pre>
+            <a className="admin-file-link" href={`${baseUrl}/sitemap.xml`} target="_blank" rel="noreferrer"><ExternalLink size={13} aria-hidden /> Open live sitemap.xml</a>
             <p className="faint admin-field-hint">Indexable routes only. Updated whenever metadata changes.</p>
           </div>
         </div>
       )}
 
-      <Modal open={Boolean(editing)} onClose={() => setEditing(null)} title={editing === 'new' ? 'Add route metadata' : `SEO for ${form.route}`} wide
+      <Modal open={Boolean(editing)} onClose={() => { if (!busy) setEditing(null); }} title={editing === 'new' ? 'Add route metadata' : `SEO for ${form.route}`} wide
         footer={<>
-          <Button variant="ghost" onClick={() => setEditing(null)}>Cancel</Button>
-          <Button variant="primary" icon={<Save size={14} />} onClick={saveSeo}>Save</Button>
+          <Button variant="ghost" onClick={() => setEditing(null)} disabled={busy}>Cancel</Button>
+          <Button variant="primary" icon={<Save size={14} />} loading={busy} onClick={() => void saveSeo()}>Save</Button>
         </>}>
         <div className="admin-form-grid">
           <Field label="Route" htmlFor="seo-route">
@@ -154,12 +186,13 @@ export default function Seo() {
         <Field label="Structured data (JSON-LD)" htmlFor="seo-json" hint="Optional. Validated as JSON on save.">
           <Textarea id="seo-json" className="mono" value={form.structuredData} onChange={(e) => setForm({ ...form, structuredData: e.target.value })} rows={3} />
         </Field>
+        {formError && <p role="alert" className="admin-form-error">{formError}</p>}
       </Modal>
 
-      <Modal open={Boolean(redirect)} onClose={() => setRedirect(null)} title={redirect === 'new' ? 'Add redirect' : 'Edit redirect'}
+      <Modal open={Boolean(redirect)} onClose={() => { if (!busy) setRedirect(null); }} title={redirect === 'new' ? 'Add redirect' : 'Edit redirect'}
         footer={<>
-          <Button variant="ghost" onClick={() => setRedirect(null)}>Cancel</Button>
-          <Button variant="primary" onClick={saveRedirect}>Save redirect</Button>
+          <Button variant="ghost" onClick={() => setRedirect(null)} disabled={busy}>Cancel</Button>
+          <Button variant="primary" loading={busy} onClick={() => void saveRedirect()}>Save redirect</Button>
         </>}>
         <Field label="From" htmlFor="rd-from">
           <Input id="rd-from" value={rForm.from} onChange={(e) => setRForm({ ...rForm, from: e.target.value })} placeholder="/old-page" />
@@ -173,12 +206,19 @@ export default function Seo() {
             <option value="302">302 (temporary)</option>
           </NativeSelect>
         </Field>
+        {formError && <p role="alert" className="admin-form-error">{formError}</p>}
       </Modal>
 
       <ConfirmDialog
         open={Boolean(deletingRedirect)} onClose={() => setDeletingRedirect(null)}
-        onConfirm={() => { if (deletingRedirect) { adminService.removeRedirect(deletingRedirect.id, name); toast('Redirect deleted.', 'success'); } }}
+        onConfirm={() => void removeRedirect()}
         title="Delete redirect" body={`Delete the redirect from ${deletingRedirect?.from}?`}
+        confirmLabel="Delete"
+      />
+      <ConfirmDialog
+        open={Boolean(deletingSeo)} onClose={() => setDeletingSeo(null)}
+        onConfirm={() => void removeSeo()}
+        title="Delete SEO record" body={`Delete metadata for ${deletingSeo?.route}?`}
         confirmLabel="Delete"
       />
     </AdminPage>

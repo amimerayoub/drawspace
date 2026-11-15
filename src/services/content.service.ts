@@ -4,7 +4,7 @@ export type ContentDifficulty = 'easy' | 'medium' | 'hard';
 export type ContentBlogStatus = 'draft' | 'published' | 'scheduled' | 'archived';
 
 export interface ContentWord { id: string; word: string; category: string; difficulty: ContentDifficulty; language: string; hint: string; active: boolean; createdAt: string; updatedAt: string }
-export interface ContentBlog { id: string; slug: string; title: string; excerpt: string; content: string; category: string; tags: string[]; status: ContentBlogStatus; cover: string; author: string; seoTitle: string; seoDescription: string; publishedAt: string; createdAt: string; updatedAt: string; views: number }
+export interface ContentBlog { id: string; slug: string; title: string; excerpt: string; content: string; studioDoc?: string; category: string; tags: string[]; status: ContentBlogStatus; cover: string; author: string; seoTitle: string; seoDescription: string; publishedAt: string; createdAt: string; updatedAt: string; views: number }
 export interface WordStats { total: number; active: number; inactive: number; byCategory: Record<string, number>; byDifficulty: Record<string, number>; byLanguage: Record<string, number> }
 export interface BlogStats { total: number; published: number; draft: number; scheduled: number; archived: number; totalViews: number; mostViewed: ContentBlog[]; recent: ContentBlog[] }
 export interface WordCategory { id: string; name: string; slug: string; wordCount: number }

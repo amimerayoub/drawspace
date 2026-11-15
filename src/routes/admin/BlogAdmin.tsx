@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Archive, ArrowLeft, Download, Eye, EyeOff, FileUp, Pencil, Plus, Send, Trash2 } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { Archive, ArrowLeft, Download, Eye, EyeOff, FileUp, Pencil, Plus, Send, Trash2, Wand2 } from 'lucide-react';
 import { useToast } from '@/context/ToastContext';
 import { contentService, type BlogInput, type BlogStats, type ContentBlog, type ContentBlogStatus } from '@/services/content.service';
 import { Badge, Button, ConfirmDialog, Field, Input, NativeSelect, Textarea } from '@/components/ui';
@@ -28,6 +29,7 @@ const statusTone = (status: ContentBlogStatus) => status === 'published' ? 'acce
 
 export default function BlogAdmin() {
   const { toast } = useToast();
+  const navigate = useNavigate();
   const [posts, setPosts] = useState<ContentBlog[]>([]);
   const [stats, setStats] = useState<BlogStats | null>(null);
   const [categories, setCategories] = useState<string[]>([]);
@@ -143,9 +145,10 @@ export default function BlogAdmin() {
     { key: 'publishAt', header: 'Publish date', render: (p) => <span className="muted">{p.publishedAt ? new Date(p.publishedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 'Not set'}</span>, sortValue: (p) => p.publishedAt },
     { key: 'views', header: 'Views', align: 'end', render: (p) => <span className="mono">{p.views.toLocaleString()}</span>, sortValue: (p) => p.views },
     {
-      key: 'actions', header: '', align: 'end', width: '150px',
+      key: 'actions', header: '', align: 'end', width: '185px',
       render: (p) => (
         <span className="admin-row-actions">
+          <Button size="sm" variant="ghost" icon={<Wand2 size={13} />} onClick={() => navigate(`/admin/blog/studio/${p.id}`)} aria-label={`Open ${p.title} in Studio`} />
           <Button size="sm" variant="ghost" icon={<Pencil size={13} />} onClick={() => open(p)} aria-label={`Edit ${p.title}`} />
           {p.status === 'published'
             ? <Button size="sm" variant="ghost" icon={<EyeOff size={13} />} onClick={() => setConfirmAction({ kind: 'unpublish', post: p })} aria-label={`Unpublish ${p.title}`} />
@@ -256,6 +259,7 @@ export default function BlogAdmin() {
       actions={<>
         <Button variant="ghost" icon={<FileUp size={15} />} onClick={() => setImportOpen(true)}>Import</Button>
         <Button variant="ghost" icon={<Download size={15} />} onClick={() => setExportOpen(true)}>Export</Button>
+        <Button variant="secondary" icon={<Wand2 size={15} />} onClick={() => navigate('/admin/blog/studio')}>Open Studio</Button>
         <Button variant="primary" icon={<Plus size={15} />} onClick={() => open('new')}>New article</Button>
       </>}
     >

@@ -43,7 +43,10 @@ export class ModerationReportRepository {
 
   async list(status?: string) {
     const rows = await this.rows.list(status ? [Query.equal('status', status), Query.orderDesc('createdAt'), Query.limit(200)] : [Query.orderDesc('createdAt'), Query.limit(200)]);
-    return rows.map((row) => ({ id: String(row.id), type: String(row.reportType), target: row.roomId ? `Room ${String(row.roomId)}` : String(row.reportedUserId), reporter: String(row.reporterUsername), reason: String(row.reportType), at: String(row.createdAt), status: row.status === 'pending' ? 'open' : String(row.status), detail: String(row.description), reportedUserId: String(row.reportedUserId || ''), reportedUsername: String(row.reportedUsername || ''), roomId: String(row.roomId || '') }));
+    return rows.map((row) => {
+      const reviewed = row.status !== 'pending' && row.status !== 'open';
+      return { id: String(row.id), type: String(row.reportType), target: row.roomId ? `Room ${String(row.roomId)}` : String(row.reportedUserId), reporter: String(row.reporterUsername), reason: String(row.reportType), at: String(row.createdAt), status: row.status === 'pending' ? 'open' : String(row.status), detail: String(row.description), reportedUserId: String(row.reportedUserId || ''), reportedUsername: String(row.reportedUsername || ''), roomId: String(row.roomId || ''), moderatorNotes: String(row.moderatorNotes || ''), resolutionAction: String(row.resolutionAction || ''), resolvedAt: reviewed ? String(row.updatedAt || '') : '' };
+    });
   }
 
   async resolve(id: string, status: 'resolved' | 'dismissed', actor: { userId: string; username: string; role: string }, reason: string) {

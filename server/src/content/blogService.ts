@@ -3,6 +3,7 @@ import { Query, type AppwriteDatabase } from '../database/appwrite';
 import { HttpError } from '../middleware/errors';
 import { RowRepository, type Row } from '../repositories/rowRepository';
 import { decodeCursor, encodeCursor, slugifyName, type ContentActor, type ImportStrategy } from './wordService';
+import { prepareStudio, STUDIO_DOC_MAX } from './studioContent';
 
 export type BlogStatus = 'draft' | 'published' | 'scheduled' | 'archived';
 export const BLOG_STATUSES: BlogStatus[] = ['draft', 'published', 'scheduled', 'archived'];
@@ -10,7 +11,7 @@ export const BLOG_SORT_FIELDS = ['title', 'publishedAt', 'createdAt', 'updatedAt
 export type BlogSortField = typeof BLOG_SORT_FIELDS[number];
 
 export interface BlogInput { id?: string; title: string; slug?: string; excerpt?: string; content: string; category?: string; tags?: string[]; status?: BlogStatus; cover?: string; seoTitle?: string; seoDescription?: string; publishAt?: string }
-export interface BlogRecord { id: string; slug: string; title: string; excerpt: string; content: string; category: string; tags: string[]; status: string; cover: string; author: string; seoTitle: string; seoDescription: string; publishedAt: string; createdAt: string; updatedAt: string; views: number }
+export interface BlogRecord { id: string; slug: string; title: string; excerpt: string; content: string; studioDoc: string; category: string; tags: string[]; status: string; cover: string; author: string; seoTitle: string; seoDescription: string; publishedAt: string; createdAt: string; updatedAt: string; views: number }
 export interface BlogListQuery { search?: string; status?: BlogStatus; category?: string; tag?: string; sort?: BlogSortField; order?: 'asc' | 'desc'; limit?: number; cursor?: string }
 export interface BlogListResult { items: BlogRecord[]; total: number; nextCursor: string | null }
 export interface BlogStats { total: number; published: number; draft: number; scheduled: number; archived: number; totalViews: number; mostViewed: BlogRecord[]; recent: BlogRecord[] }
@@ -35,7 +36,7 @@ function cleanTags(tags: unknown): string[] {
   return [...new Set(cleaned)];
 }
 
-export function validateBlogInput(input: BlogInput): Required<Omit<BlogInput, 'id'>> & { id?: string } {
+export function validateBlogInput(input: BlogInput, maxContent = 10000): Required<Omit<BlogInput, 'id'>> & { id?: string } {
   const title = String(input.title ?? '').trim();
   if (title.length < 1 || title.length > 255 || UNSAFE_TEXT.test(title)) throw new HttpError(400, 'Title must be 1 to 255 characters.', 'VALIDATION_ERROR');
   const slug = input.slug === undefined || input.slug === '' ? slugifyName(title) : String(input.slug).trim().toLowerCase();
@@ -43,7 +44,7 @@ export function validateBlogInput(input: BlogInput): Required<Omit<BlogInput, 'i
   const excerpt = String(input.excerpt ?? '').trim();
   if (excerpt.length > 500 || UNSAFE_TEXT.test(excerpt)) throw new HttpError(400, 'Excerpt must be at most 500 characters.', 'VALIDATION_ERROR');
   const content = String(input.content ?? '');
-  if (content.length < 1 || content.length > 10000 || UNSAFE_TEXT.test(content)) throw new HttpError(400, 'Content must be 1 to 10000 characters.', 'VALIDATION_ERROR');
+  if (content.length < 1 || content.length > maxContent || UNSAFE_TEXT.test(content)) throw new HttpError(400, `Content must be 1 to ${maxContent} characters.`, 'VALIDATION_ERROR');
   const category = String(input.category ?? '').trim() || 'News';
   if (category.length > 64 || UNSAFE_TEXT.test(category) || /[<>]/.test(category)) throw new HttpError(400, 'Category must be at most 64 characters without markup.', 'VALIDATION_ERROR');
   const status = input.status ?? 'draft';
@@ -68,7 +69,7 @@ export class BlogService {
   private readonly posts: RowRepository;
   private readonly categories: RowRepository;
   private readonly audit: RowRepository;
-  private optionalColumns?: Promise<Set<string>>;
+  private columnMeta?: Promise<{ keys: Set<string>; contentSize: number }>;
 
   constructor(private readonly database: AppwriteDatabase) {
     this.posts = new RowRepository(database, 'blog_posts');
@@ -76,13 +77,46 @@ export class BlogService {
     this.audit = new RowRepository(database, 'audit_logs');
   }
 
-  private async optional(): Promise<Set<string>> {
-    if (!this.optionalColumns) {
-      this.optionalColumns = this.database.tables.listColumns(this.database.databaseId, 'blog_posts', [])
-        .then((result) => new Set(result.columns.map((column: { key: string }) => column.key)))
-        .catch(() => new Set<string>());
+  private meta(): Promise<{ keys: Set<string>; contentSize: number }> {
+    if (!this.columnMeta) {
+      this.columnMeta = this.database.tables.listColumns(this.database.databaseId, 'blog_posts', [])
+        .then((result) => {
+          const columns = result.columns as Array<{ key: string; size?: number }>;
+          const content = columns.find((column) => column.key === 'content');
+          const size = Number(content?.size);
+          return { keys: new Set(columns.map((column) => column.key)), contentSize: Number.isFinite(size) && size > 0 ? size : 10000 };
+        })
+        .catch(() => ({ keys: new Set<string>(), contentSize: 10000 }));
     }
-    return this.optionalColumns;
+    return this.columnMeta;
+  }
+
+  private async optional(): Promise<Set<string>> {
+    return (await this.meta()).keys;
+  }
+
+  async contentLimit(): Promise<number> {
+    return (await this.meta()).contentSize;
+  }
+
+  /* Effective cap for a serialized studio document: the studioDoc column when
+     present, otherwise the content column it must share with legacy text. */
+  async studioLimit(): Promise<number> {
+    const { keys, contentSize } = await this.meta();
+    return keys.has('studioDoc') ? STUDIO_DOC_MAX : contentSize;
+  }
+
+  /* Map a validated payload onto the content/studioDoc columns. With the studio
+     column present the full document lives in studioDoc and content keeps a
+     plain-text projection for search and legacy readers; without it the
+     serialized document must fit the content column. */
+  private async studioFields(clean: { content: string; title: string }, actorRole: string, optional: Set<string>): Promise<{ content: string; studioDoc?: string }> {
+    const limit = await this.contentLimit();
+    const prepared = prepareStudio(clean.content, actorRole);
+    if (!prepared.isStudio) return optional.has('studioDoc') ? { content: clean.content, studioDoc: '' } : { content: clean.content };
+    if (optional.has('studioDoc')) return { content: prepared.plain.slice(0, limit) || clean.title, studioDoc: prepared.serialized };
+    if (prepared.serialized.length > limit) throw new HttpError(400, `Studio content exceeds the ${limit} character content limit. Run the studio migration to store larger documents.`, 'CONTENT_TOO_LARGE');
+    return { content: prepared.serialized };
   }
 
   private async allRows(): Promise<Row[]> {
@@ -107,6 +141,7 @@ export class BlogService {
       title: String(row.title ?? ''),
       excerpt: String(row.excerpt ?? ''),
       content: String(row.content ?? ''),
+      studioDoc: String(row.studioDoc ?? ''),
       category: categoryName,
       tags: Array.isArray(row.tags) ? row.tags.map((tag) => String(tag)) : [],
       status: String(row.status ?? 'draft'),
@@ -199,18 +234,21 @@ export class BlogService {
   }
 
   async create(input: BlogInput, actor: ContentActor): Promise<BlogRecord> {
-    const clean = validateBlogInput(input);
+    const optional = await this.optional();
+    const cap = optional.has('studioDoc') ? STUDIO_DOC_MAX : await this.contentLimit();
+    const clean = validateBlogInput(input, cap);
     const rows = await this.allRows();
     if (rows.some((row) => String(row.slug) === clean.slug)) throw new HttpError(409, 'A post with this slug already exists.', 'SLUG_DUPLICATE');
     if (clean.id && rows.some((row) => String(row.id) === clean.id)) throw new HttpError(409, 'A post with this ID already exists.', 'POST_DUPLICATE');
     const category = await this.getOrCreateCategory(clean.category);
-    const optional = await this.optional();
+    const fields = await this.studioFields(clean, actor.role, optional);
     const now = new Date().toISOString();
     const data: Record<string, unknown> = {
-      id: clean.id || randomUUID().replaceAll('-', '').slice(0, 32), slug: clean.slug, title: clean.title, excerpt: clean.excerpt, content: clean.content,
+      id: clean.id || randomUUID().replaceAll('-', '').slice(0, 32), slug: clean.slug, title: clean.title, excerpt: clean.excerpt, content: fields.content,
       categoryId: String(category.id), status: clean.status, featuredImage: clean.cover, seoTitle: clean.seoTitle, seoDescription: clean.seoDescription,
       publishedAt: clean.publishAt, authorId: actor.userId, authorName: actor.username.slice(0, 64), views: 0, createdAt: now, updatedAt: now,
     };
+    if (fields.studioDoc !== undefined) data.studioDoc = fields.studioDoc;
     if (optional.has('tags')) data.tags = clean.tags;
     const row = await this.posts.insert(data);
     await this.writeAudit(actor, 'blog.create', 'blog_post', String(data.id), `${clean.status}: ${clean.title}`);
@@ -224,19 +262,23 @@ export class BlogService {
     if (!existing) throw new HttpError(404, 'Blog post not found.', 'POST_NOT_FOUND');
     const names = await this.categoryNames();
     const current = this.toRecord(existing, names.get(String(existing.categoryId)) || 'News');
+    const optional = await this.optional();
+    const cap = optional.has('studioDoc') ? STUDIO_DOC_MAX : await this.contentLimit();
+    const contentSource = patch.content !== undefined ? patch.content : (current.studioDoc || current.content);
     const clean = validateBlogInput({
-      title: patch.title ?? current.title, slug: patch.slug ?? current.slug, excerpt: patch.excerpt ?? current.excerpt, content: patch.content ?? current.content,
+      title: patch.title ?? current.title, slug: patch.slug ?? current.slug, excerpt: patch.excerpt ?? current.excerpt, content: contentSource,
       category: patch.category ?? current.category, tags: patch.tags ?? current.tags, status: (patch.status ?? current.status) as BlogStatus,
       cover: patch.cover ?? current.cover, seoTitle: patch.seoTitle ?? current.seoTitle, seoDescription: patch.seoDescription ?? current.seoDescription,
       publishAt: patch.publishAt ?? current.publishedAt,
-    });
+    }, cap);
     if (rows.some((row) => row.$id !== existing.$id && String(row.slug) === clean.slug)) throw new HttpError(409, 'A post with this slug already exists.', 'SLUG_DUPLICATE');
     const category = await this.getOrCreateCategory(clean.category);
-    const optional = await this.optional();
+    const fields = await this.studioFields(clean, actor.role, optional);
     const data: Record<string, unknown> = {
-      slug: clean.slug, title: clean.title, excerpt: clean.excerpt, content: clean.content, categoryId: String(category.id), status: clean.status,
+      slug: clean.slug, title: clean.title, excerpt: clean.excerpt, content: fields.content, categoryId: String(category.id), status: clean.status,
       featuredImage: clean.cover, seoTitle: clean.seoTitle, seoDescription: clean.seoDescription, publishedAt: clean.publishAt, updatedAt: new Date().toISOString(),
     };
+    if (fields.studioDoc !== undefined) data.studioDoc = fields.studioDoc;
     if (optional.has('tags')) data.tags = clean.tags;
     const row = await this.posts.patch(existing.$id, data);
     await this.writeAudit(actor, 'blog.update', 'blog_post', id, `${clean.status}: ${clean.title}`);

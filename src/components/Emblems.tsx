@@ -3,6 +3,7 @@ import {
 } from 'lucide-react';
 import type { Achievement, Title } from '@/types';
 import { achievementImage, titleImage } from '@/data/assets';
+import { ResponsiveImage } from './ResponsiveImage';
 
 const FALLBACK: Record<string, LucideIcon> = {
   sparkles: Sparkles, eye: Eye, target: Target, pen: PenTool, palette: Palette, trophy: Trophy,
@@ -25,7 +26,7 @@ export function AchievementIcon({ achievement, size = 40, unlocked = true, class
       aria-label={achievement.name}
     >
       {src
-        ? <img src={src} alt="" width={size} height={size} loading="lazy" decoding="async" />
+        ? <ResponsiveImage src={src} alt="" width={size} height={size} />
         : <Icon size={Math.round(size * 0.5)} aria-hidden />}
     </span>
   );
@@ -37,15 +38,13 @@ export function TitleIcon({ title, size = 18, className = '' }: { title: Title; 
   const src = title.image ?? titleImage(title.id);
   if (!src) return null;
   return (
-    <img
+    <ResponsiveImage
       className={`emblem title-emblem ${className}`}
       src={src}
       alt=""
       aria-hidden
       width={size}
       height={size}
-      loading="lazy"
-      decoding="async"
     />
   );
 }
@@ -54,7 +53,7 @@ export function TitleIcon({ title, size = 18, className = '' }: { title: Title; 
 export function Emblem({ src, size = 28, className = '' }: { src: string; size?: number; className?: string }) {
   return (
     <span className={`emblem ${className}`} style={{ width: size, height: size }} aria-hidden>
-      <img src={src} alt="" width={size} height={size} loading="lazy" decoding="async" />
+      <ResponsiveImage src={src} alt="" width={size} height={size} />
     </span>
   );
 }

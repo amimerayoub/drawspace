@@ -1,12 +1,13 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom';
-import { Globe, Menu, Moon, Sun, X, LogOut, User as UserIcon, Trophy, Target, Shield, ChevronDown } from 'lucide-react';
+import { Globe, Menu, Moon, Sun, X, LogOut, User as UserIcon, Trophy, Target, Shield, ChevronDown, Check } from 'lucide-react';
 import { useI18n, LOCALES } from '@/i18n/I18nContext';
 import { useTheme } from '@/theme/ThemeContext';
 import { useAuth } from '@/context/AuthContext';
 import { useToast } from '@/context/ToastContext';
+import { usePlatformConfig } from '@/context/PlatformConfigContext';
 import { Avatar } from './Avatar';
-import { GlassSelect } from './ui';
+import { ResponsiveImage } from './ResponsiveImage';
 import { BRAND } from '@/data/assets';
 import type { Locale } from '@/types';
 
@@ -14,11 +15,12 @@ import type { Locale } from '@/types';
    black/white contrast so it reads on light and dark surfaces, and the
    wordmark follows the theme text color instead of a baked-in raster. */
 export function Logo({ size = 26 }: { size?: number }) {
+  const { config } = usePlatformConfig();
   return (
     <span className="logo">
-      <img className="logo-mark" src={BRAND.icon} alt="" width={size} height={size} />
+      <ResponsiveImage className="logo-mark" src={config.logoUrl || BRAND.icon} alt="" width={size} height={size} eager />
       <span className="logo-sep" aria-hidden />
-      <span className="logo-word">DrawSpace</span>
+      <span className="logo-word">{config.siteName}</span>
     </span>
   );
 }
@@ -37,20 +39,85 @@ export function LanguageSelect({ compact = true }: { compact?: boolean }) {
   const { locale, t } = useI18n();
   const navigate = useNavigate();
   const { pathname } = useLocation();
+  const [open, setOpen] = useState(false);
+  const [active, setActive] = useState(0);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const listRef = useRef<HTMLUListElement>(null);
+  const listId = useId();
+  const current = LOCALES.find((l) => l.code === locale) ?? LOCALES[0];
+
+  useEffect(() => {
+    if (!open) return;
+    const onDoc = (e: MouseEvent) => {
+      if (rootRef.current && !rootRef.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener('mousedown', onDoc);
+    return () => document.removeEventListener('mousedown', onDoc);
+  }, [open]);
+
+  useEffect(() => {
+    if (open) {
+      setActive(Math.max(0, LOCALES.findIndex((l) => l.code === locale)));
+      listRef.current?.focus();
+    }
+  }, [open, locale]);
+
+  const commit = (code: Locale) => {
+    setOpen(false);
+    const rest = pathname.replace(/^\/[^/]+/, '') || '/';
+    navigate(`/${code}${rest === '/' ? '' : rest}`);
+  };
+
+  const onKey = (e: React.KeyboardEvent) => {
+    if (e.key === 'Escape') { setOpen(false); return; }
+    if (e.key === 'ArrowDown') { e.preventDefault(); setActive((a) => Math.min(a + 1, LOCALES.length - 1)); }
+    if (e.key === 'ArrowUp') { e.preventDefault(); setActive((a) => Math.max(a - 1, 0)); }
+    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); commit(LOCALES[active].code); }
+    if (e.key === 'Home') { e.preventDefault(); setActive(0); }
+    if (e.key === 'End') { e.preventDefault(); setActive(LOCALES.length - 1); }
+  };
+
   return (
-    <div className="lang-select">
-      <Globe size={15} aria-hidden className="lang-icon" />
-      <GlassSelect
-        compact={compact}
-        label={t('common.language')}
-        value={locale}
-        align="end"
-        options={LOCALES.map((l) => ({ value: l.code, label: l.label }))}
-        onChange={(v) => {
-          const rest = pathname.replace(/^\/[^/]+/, '') || '/';
-          navigate(`/${v as Locale}${rest === '/' ? '' : rest}`);
-        }}
-      />
+    <div className={`lang-select ${compact ? 'lang-compact' : ''}`} ref={rootRef}>
+      <button
+        type="button"
+        className="lang-trigger"
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        aria-controls={open ? listId : undefined}
+        aria-label={t('common.language')}
+        onClick={() => setOpen((o) => !o)}
+      >
+        <Globe size={15} aria-hidden className="lang-icon" />
+        <span className="lang-value">{current.label}</span>
+        <ChevronDown size={14} aria-hidden className={`lang-chevron ${open ? 'open' : ''}`} />
+      </button>
+      {open && (
+        <ul
+          id={listId}
+          className="lang-menu"
+          role="listbox"
+          aria-label={t('common.language')}
+          tabIndex={-1}
+          ref={listRef}
+          onKeyDown={onKey}
+        >
+          {LOCALES.map((l, i) => (
+            <li key={l.code} role="option" aria-selected={l.code === locale}>
+              <button
+                type="button"
+                className={`lang-option ${i === active ? 'active' : ''} ${l.code === locale ? 'selected' : ''}`}
+                onMouseEnter={() => setActive(i)}
+                onClick={() => commit(l.code)}
+              >
+                <span className="lang-option-label">{l.label}</span>
+                <span className="lang-code">{l.code.split('-')[0].toUpperCase()}</span>
+                <span className="lang-check">{l.code === locale && <Check size={14} className="accent" aria-hidden />}</span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }

@@ -198,6 +198,14 @@ export interface MediaAsset {
   size: number;
   createdAt: string;
   url: string;
+  mimeType?: string;
+  width?: number;
+  height?: number;
+  hasAlpha?: boolean;
+  optimized?: boolean;
+  widths?: number[];
+  thumbUrl?: string;
+  originalUrl?: string;
 }
 
 export interface AuditEntry {
@@ -220,6 +228,49 @@ export interface Report {
   at: string;
   status: 'open' | 'resolved' | 'dismissed';
   detail: string;
+  moderatorNotes?: string;
+  resolutionAction?: string;
+  resolvedAt?: string;
+}
+
+export interface OverviewActivity {
+  id: string;
+  admin: string;
+  action: string;
+  target: string;
+  at: string;
+  status: string;
+}
+
+export interface PlatformOverview {
+  users: { total: number | null; active: number | null };
+  rooms: { total: number; waiting: number; playing: number; finished: number; players: number };
+  matches: { total: number | null };
+  blog: { total: number | null; published: number | null; drafts: number | null };
+  words: { total: number | null; active: number | null };
+  reports: { total: number | null; open: number | null; resolved: number | null; dismissed: number | null };
+  recentActivity: OverviewActivity[];
+  generatedAt: string;
+}
+
+export interface AnalyticsTopPlayer {
+  userId: string;
+  username: string;
+  avatarId: string;
+  xp: number;
+  level: number;
+  wins: number;
+}
+
+export interface PlatformAnalytics {
+  range: { days: number; from: string; to: string };
+  totals: { users: number | null; activeUsers: number | null; matches: number | null; wordsGuessed: number; xpAwarded: number };
+  series: { labels: string[]; signups: number[]; matches: number[]; xp: number[] };
+  locales: { locale: string; count: number }[];
+  accountTypes: { registered: number; guest: number };
+  topPlayers: AnalyticsTopPlayer[];
+  matchesAvailable: boolean;
+  generatedAt: string;
 }
 
 export interface SeoRecord {
@@ -274,6 +325,14 @@ export interface XpConfig {
   levelGrowth: number;
 }
 
+export interface XpSettings {
+  correctGuessXp: number;
+  winBonusXp: number;
+  challengeMultiplier: number;
+  levelBase: number;
+  levelGrowth: number;
+}
+
 export interface SystemSettings {
   siteName: string;
   tagline: string;
@@ -291,6 +350,49 @@ export interface PermissionDef {
 }
 
 export type RolePermissions = Record<string, string[]>;
+
+export interface RoleMatrixEntry {
+  role: string;
+  label: string;
+  permissions: string[];
+}
+
+export interface PermissionMatrix {
+  permissions: PermissionDef[];
+  assignableRoles: string[];
+  roles: RoleMatrixEntry[];
+  totalPermissions: number;
+}
+
+export interface AdminRoomPlayer {
+  userId: string;
+  username: string;
+  avatarId: string;
+  score: number;
+  ready: boolean;
+  connected: boolean;
+  host: boolean;
+  isGuest: boolean;
+  hasGuessed: boolean;
+}
+
+export interface AdminRoom {
+  code: string;
+  name: string;
+  hostId: string;
+  status: 'waiting' | 'choosing' | 'drawing' | 'round_end' | 'finished' | 'closed';
+  visibility: 'public' | 'private';
+  hasPassword: boolean;
+  settings: { maxPlayers: number; rounds: number; roundSeconds: number; difficulty: string; wordMode: string };
+  players: AdminRoomPlayer[];
+  playerCount: number;
+  connectedCount: number;
+  round: number;
+  rounds: number;
+  turnId: number;
+  drawerUserId: string | null;
+  startedAt: number;
+}
 
 export interface Toast {
   id: number;

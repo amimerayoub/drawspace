@@ -2,27 +2,30 @@ import { createHash } from 'node:crypto';
 import { Query, type AppwriteDatabase } from '../database/appwrite';
 import { RowRepository, type Row } from './rowRepository';
 import { StatisticsRepository } from './statisticsRepository';
+import { XpConfigRepository } from './xpConfigRepository';
 
 type Table = 'player_progression' | 'xp_transactions' | 'achievements' | 'user_achievements' | 'titles' | 'user_titles' | 'challenges' | 'user_challenges' | 'leaderboard_snapshots';
 const LEVEL_BASE = 100;
 const LEVEL_GROWTH = 1.18;
 
-export function levelForXp(totalXP: number) {
+export function levelForXp(totalXP: number, base = LEVEL_BASE, growth = LEVEL_GROWTH) {
   let level = 1;
   let remaining = Math.max(0, totalXP);
-  let needed = LEVEL_BASE;
-  while (remaining >= needed && level < 99) { remaining -= needed; level += 1; needed = Math.round(LEVEL_BASE * LEVEL_GROWTH ** (level - 1)); }
+  let needed = base;
+  while (remaining >= needed && level < 99) { remaining -= needed; level += 1; needed = Math.round(base * growth ** (level - 1)); }
   return { level, into: remaining, needed };
 }
 
 export class ProgressionRepository {
   private readonly tables = new Map<Table, RowRepository>();
   private readonly statistics: StatisticsRepository;
+  private readonly xpConfig: XpConfigRepository;
   constructor(private readonly database: AppwriteDatabase) {
     for (const table of ['player_progression', 'xp_transactions', 'achievements', 'user_achievements', 'titles', 'user_titles', 'challenges', 'user_challenges', 'leaderboard_snapshots'] as const) {
       this.tables.set(table, new RowRepository(database, table));
     }
     this.statistics = new StatisticsRepository(database);
+    this.xpConfig = new XpConfigRepository(database);
   }
 
   async dashboard(userId: string) {
@@ -33,7 +36,8 @@ export class ProgressionRepository {
       this.list('user_challenges', [Query.equal('userId', userId), Query.limit(200)]), this.list('xp_transactions', [Query.equal('userId', userId), Query.orderDesc('createdAt'), Query.limit(100)]),
     ]);
     const totalXP = Number(progression?.totalXP) || 0;
-    const level = levelForXp(totalXP);
+    const xpSettings = await this.xpConfig.get();
+    const level = levelForXp(totalXP, xpSettings.levelBase, xpSettings.levelGrowth);
     const unlockedAchievementIds = new Set(unlockedAchievements.map((row) => String(row.achievementId)));
     const unlockedTitleIds = new Set(unlockedTitles.map((row) => String(row.titleId)));
     const achievementRows = achievements.map((row) => {
@@ -97,7 +101,8 @@ export class ProgressionRepository {
     const periodKey = this.periodKey(String(challenge.period), new Date());
     const state = await this.find('user_challenges', [Query.equal('userId', userId), Query.equal('challengeId', challengeId), Query.equal('periodKey', periodKey), Query.limit(1)]);
     if (!state || Number(state.progress) < Number(challenge.targetValue) || state.claimed === true) throw new Error('Challenge is not ready to claim.');
-    const xp = Number(challenge.rewardXP) || 0;
+    const xpSettings = await this.xpConfig.get();
+    const xp = Math.round((Number(challenge.rewardXP) || 0) * xpSettings.challengeMultiplier);
     const result = await this.award(userId, xp, `challenge:${challengeId}:${periodKey}:${userId}`, 'challenge', `Challenge: ${String(challenge.name)}`, '');
     if (!result.awarded) throw new Error('Challenge reward has already been claimed.');
     await this.repo('user_challenges').patch(state.$id, { claimed: true });
@@ -105,7 +110,8 @@ export class ProgressionRepository {
   }
 
   async recordMatch(matchId: string, player: { userId: string; score: number; wins: number; correctGuesses: number; totalGuesses: number; place: number }) {
-    const xp = Math.max(0, player.correctGuesses * 15 + (player.place === 1 ? 30 : 0));
+    const xpSettings = await this.xpConfig.get();
+    const xp = Math.max(0, player.correctGuesses * xpSettings.correctGuessXp + (player.place === 1 ? xpSettings.winBonusXp : 0));
     const award = await this.award(player.userId, xp, `match:${matchId}:${player.userId}`, 'match', `Match finished, place ${player.place}`, matchId);
     if (!award.awarded) return { duplicate: true, xp: 0 };
     const stats = await this.statistics.recordMatch(player.userId, { totalGames: 1, gamesWon: player.wins, totalGuesses: player.totalGuesses, correctGuesses: player.correctGuesses, totalPoints: player.score });
@@ -130,7 +136,9 @@ export class ProgressionRepository {
       if (!reward.awarded) continue;
       await this.repo('user_achievements').insert({ userId, achievementId, unlockedAt: new Date().toISOString(), progressSnapshot: value, rewardTransactionId: transactionId });
       const progression = await this.one('player_progression', 'userId', userId);
-      if (progression) await this.repo('player_progression').patch(progression.$id, { totalXP: reward.totalXP, currentLevel: levelForXp(reward.totalXP).level, highestLevel: Math.max(Number(progression.highestLevel) || 1, levelForXp(reward.totalXP).level), updatedAt: new Date().toISOString() });
+      const xpSettings = await this.xpConfig.get();
+      const rewardLevel = levelForXp(reward.totalXP, xpSettings.levelBase, xpSettings.levelGrowth).level;
+      if (progression) await this.repo('player_progression').patch(progression.$id, { totalXP: reward.totalXP, currentLevel: rewardLevel, highestLevel: Math.max(Number(progression.highestLevel) || 1, rewardLevel), updatedAt: new Date().toISOString() });
       totalXP = reward.totalXP;
     }
     await this.unlockTitles(userId, stats);
@@ -183,7 +191,8 @@ export class ProgressionRepository {
     }
     const current = await this.one('player_progression', 'userId', userId);
     const totalXP = (Number(current?.totalXP) || 0) + amount;
-    const level = levelForXp(totalXP).level;
+    const xpSettings = await this.xpConfig.get();
+    const level = levelForXp(totalXP, xpSettings.levelBase, xpSettings.levelGrowth).level;
     if (current) await this.repo('player_progression').patch(current.$id, { totalXP, currentLevel: level, highestLevel: Math.max(Number(current.highestLevel) || 1, level), updatedAt: createdAt });
     else await this.repo('player_progression').insert({ userId, totalXP, currentLevel: level, highestLevel: level, equippedTitleId: '', updatedAt: createdAt });
     return { awarded: true, totalXP };

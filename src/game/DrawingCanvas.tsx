@@ -17,13 +17,14 @@ const COLORS = [
 interface Props {
   interactive: boolean;
   replayStrokes: Stroke[];
+  resetKey?: number | string;
   onStroke?: (stroke: Stroke) => void;
   onUndo?: () => void;
   onRedo?: () => void;
   onClear?: () => void;
 }
 
-export function DrawingCanvas({ interactive, replayStrokes, onStroke, onUndo, onRedo, onClear }: Props) {
+export function DrawingCanvas({ interactive, replayStrokes, resetKey, onStroke, onUndo, onRedo, onClear }: Props) {
   const { t } = useI18n();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [strokes, setStrokes] = useState<Stroke[]>([]);
@@ -76,6 +77,17 @@ export function DrawingCanvas({ interactive, replayStrokes, onStroke, onUndo, on
     canvas.height = H * dpr;
     redraw();
   }, [redraw]);
+
+  useEffect(() => {
+    setStrokes([]);
+    pastRef.current = [];
+    futureRef.current = [];
+    liveRef.current = null;
+    drawingRef.current = false;
+    pointerRef.current = null;
+    setCanUndo(false);
+    setCanRedo(false);
+  }, [resetKey]);
 
   const toPoint = (e: React.PointerEvent) => {
     const rect = canvasRef.current!.getBoundingClientRect();

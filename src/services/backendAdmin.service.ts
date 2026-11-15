@@ -1,9 +1,32 @@
-import { apiDelete, apiGet, apiPatch, apiPut } from './apiClient';
-import type { AdUnit, Article, AuditEntry, Report, SystemSettings, Word } from '@/types';
+import { apiDelete, apiGet, apiPatch, apiPost, apiPut, apiRequest } from './apiClient';
+import type { AdUnit, AdminRoom, Article, AuditEntry, CrmMessage, MediaAsset, PermissionMatrix, PlatformAnalytics, PlatformOverview, RedirectRule, Report, SeoRecord, SystemSettings, Word, XpSettings } from '@/types';
 
 export const backendAdminService = {
+  overview: () => apiGet<PlatformOverview>('/api/admin/overview'),
+  analytics: (days = 14) => apiGet<PlatformAnalytics>(`/api/admin/analytics?days=${days}`),
+  permissions: () => apiGet<PermissionMatrix>('/api/admin/permissions'),
+  rooms: () => apiGet<AdminRoom[]>('/api/admin/rooms'),
+  room: (code: string) => apiGet<AdminRoom>(`/api/admin/rooms/${encodeURIComponent(code)}`),
+  closeRoom: (code: string, reason: string) => apiPost<AdminRoom>(`/api/admin/rooms/${encodeURIComponent(code)}/close`, { confirm: true, reason }),
+  kickPlayer: (code: string, userId: string, reason: string) => apiPost<{ room: AdminRoom | null; removedUserId: string }>(`/api/admin/rooms/${encodeURIComponent(code)}/kick`, { userId, reason }),
   gameSettings: () => apiGet<{ maxPlayers: number; guessRateLimitPerMinute: number; chatRateLimitPerMinute: number; allowCustomWords: boolean }>('/api/admin/game-settings'),
   saveGameSettings: (settings: { maxPlayers: number; guessRateLimitPerMinute: number; chatRateLimitPerMinute: number; allowCustomWords: boolean }) => apiPut('/api/admin/game-settings', settings),
+  xpConfig: () => apiGet<XpSettings>('/api/admin/xp-config'),
+  saveXpConfig: (settings: XpSettings) => apiPut<XpSettings>('/api/admin/xp-config', settings),
+  seo: () => apiGet<SeoRecord[]>('/api/admin/seo'),
+  saveSeo: (record: SeoRecord) => apiPut<SeoRecord>('/api/admin/seo', record),
+  deleteSeo: (route: string) => apiDelete<{ deleted: boolean }>(`/api/admin/seo?route=${encodeURIComponent(route)}`),
+  redirects: () => apiGet<RedirectRule[]>('/api/admin/seo/redirects'),
+  saveRedirect: (rule: { id?: string; from: string; to: string; code: 301 | 302 }) => apiPut<RedirectRule>('/api/admin/seo/redirects', rule),
+  deleteRedirect: (id: string) => apiDelete<{ deleted: boolean }>(`/api/admin/seo/redirects/${encodeURIComponent(id)}`),
+  media: () => apiGet<MediaAsset[]>('/api/admin/media'),
+  uploadMedia: (file: File, kind: MediaAsset['kind']) => apiRequest<MediaAsset>(`/api/admin/media/upload?name=${encodeURIComponent(file.name)}&kind=${kind}`, { method: 'POST', body: file, headers: { 'Content-Type': file.type || 'application/octet-stream' }, timeoutMs: 60_000 }),
+  renameMedia: (id: string, name: string) => apiPatch<MediaAsset>(`/api/admin/media/${encodeURIComponent(id)}`, { name }),
+  deleteMedia: (id: string) => apiDelete<{ deleted: boolean }>(`/api/admin/media/${encodeURIComponent(id)}`),
+  crm: () => apiGet<{ messages: CrmMessage[]; segments: { segment: string; count: number }[] }>('/api/admin/crm'),
+  saveCrm: (campaign: { id?: string; segment: string; subject: string; body: string; status: 'draft' | 'sent' }) => apiPut<CrmMessage>('/api/admin/crm', campaign),
+  sendCrm: (id: string) => apiPost<CrmMessage>(`/api/admin/crm/${encodeURIComponent(id)}/send`),
+  deleteCrm: (id: string) => apiDelete<{ deleted: boolean }>(`/api/admin/crm/${encodeURIComponent(id)}`),
   catalog: (kind: 'avatars' | 'titles' | 'achievements' | 'challenges' | 'words', search = '') => apiGet<Record<string, unknown>[]>(`/api/admin/catalog/${kind}?search=${encodeURIComponent(search)}`),
   saveCatalogItem: (kind: 'avatars' | 'titles' | 'achievements' | 'challenges' | 'words', id: string, values: Record<string, unknown>) => apiPut<Record<string, unknown>>(`/api/admin/catalog/${kind}/${encodeURIComponent(id)}`, values),
   deleteCatalogItem: (kind: 'avatars' | 'titles' | 'achievements' | 'challenges' | 'words', id: string) => apiDelete<{ deleted: boolean }>(`/api/admin/catalog/${kind}/${encodeURIComponent(id)}`),

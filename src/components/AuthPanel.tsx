@@ -3,6 +3,7 @@ import { Link, NavLink } from 'react-router-dom';
 import { AlertCircle, Eye, EyeOff, History, Lock, Sparkles, Trophy, UserRound } from 'lucide-react';
 import { useI18n } from '@/i18n/I18nContext';
 import { BRAND } from '@/data/assets';
+import { ResponsiveImage } from './ResponsiveImage';
 import { Field, Input } from './ui';
 
 export function AuthPanel({ mode, title, sub, children, alt }: {
@@ -18,7 +19,7 @@ export function AuthPanel({ mode, title, sub, children, alt }: {
       <section className="auth-dialog" aria-label={title}>
         <div className="auth-dialog-head">
           <span className="auth-mark" aria-hidden>
-            <img src={BRAND.icon} alt="" width={30} height={30} />
+            <ResponsiveImage src={BRAND.icon} alt="" width={30} height={30} eager />
           </span>
           <div className="auth-head-text">
             <h1 className="auth-title">{title}</h1>

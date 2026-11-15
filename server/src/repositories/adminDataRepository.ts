@@ -1,8 +1,15 @@
 import { randomUUID } from 'node:crypto';
 import { Query, type AppwriteDatabase } from '../database/appwrite';
 import { RowRepository, type Row } from './rowRepository';
+import { prepareStudio } from '../content/studioContent';
 
 type Actor = { userId: string; username: string; role: string };
+export interface PublicPlatformConfig {
+  siteName: string; tagline: string; contactEmail: string; defaultLocale: string;
+  maintenance: boolean; registrationOpen: boolean; guestPlay: boolean;
+  logoUrl: string; faviconUrl: string; announcement: string; seoTitle: string; seoDescription: string;
+  updatedAt: string | null;
+}
 export class AdminDataRepository {
   private readonly words: RowRepository;
   private readonly posts: RowRepository;
@@ -10,6 +17,7 @@ export class AdminDataRepository {
   private readonly ads: RowRepository;
   private readonly settings: RowRepository;
   private readonly audit: RowRepository;
+  private publicConfigCache: { value: PublicPlatformConfig; at: number } | null = null;
   constructor(private readonly database: AppwriteDatabase) {
     this.words = new RowRepository(database, 'custom_words'); this.posts = new RowRepository(database, 'blog_posts');
     this.categories = new RowRepository(database, 'blog_categories'); this.ads = new RowRepository(database, 'advertisements');
@@ -40,7 +48,8 @@ export class AdminDataRepository {
     const existing = await this.posts.findOne('id', input.id);
     const category = await this.getOrCreateCategory(input.category);
     const now = new Date().toISOString();
-    const data = { id: input.id, slug: input.slug, title: input.title, excerpt: input.excerpt, content: input.content, categoryId: String(category.id), status: input.status, featuredImage: input.cover, seoTitle: input.seoTitle, seoDescription: input.seoDescription, publishedAt: input.publishAt || '', authorId: actor.userId, authorName: actor.username.slice(0, 64), views: Number(existing?.views) || 0, createdAt: String(existing?.createdAt || now), updatedAt: now };
+    const content = prepareStudio(input.content, actor.role).serialized;
+    const data = { id: input.id, slug: input.slug, title: input.title, excerpt: input.excerpt, content, categoryId: String(category.id), status: input.status, featuredImage: input.cover, seoTitle: input.seoTitle, seoDescription: input.seoDescription, publishedAt: input.publishAt || '', authorId: actor.userId, authorName: actor.username.slice(0, 64), views: Number(existing?.views) || 0, createdAt: String(existing?.createdAt || now), updatedAt: now };
     if (existing) await this.posts.patch(existing.$id, data); else await this.posts.insert(data);
     await this.writeAudit(actor, existing ? 'blog.update' : 'blog.create', 'blog_post', input.id, input.status);
     return input;
@@ -70,10 +79,32 @@ export class AdminDataRepository {
     if (!row) return null;
     return { siteName: String(row.platformName), tagline: String(row.platformDescription), contactEmail: String(row.publicSupportEmail), defaultLocale: String(row.defaultLanguage), maintenance: Boolean(row.maintenanceMode), registrationOpen: Boolean(row.registrationEnabled), guestPlay: Boolean(row.guestAccessEnabled), maxRoomCapacity: Number(row.maxRoomCapacity), allowCustomWords: Boolean(row.allowCustomWords) };
   }
+  async getPublicConfig(): Promise<PublicPlatformConfig> {
+    if (this.publicConfigCache && Date.now() - this.publicConfigCache.at < 30_000) return this.publicConfigCache.value;
+    const row = (await this.settings.list([Query.limit(1)]))[0];
+    const value: PublicPlatformConfig = {
+      siteName: String(row?.platformName || 'DrawSpace'),
+      tagline: String(row?.platformDescription || ''),
+      contactEmail: String(row?.publicSupportEmail || 'hello@drawspace.cloud'),
+      defaultLocale: String(row?.defaultLanguage || 'en'),
+      maintenance: Boolean(row?.maintenanceMode),
+      registrationOpen: row?.registrationEnabled !== false,
+      guestPlay: row?.guestAccessEnabled !== false,
+      logoUrl: String(row?.logoUrl || ''),
+      faviconUrl: String(row?.faviconUrl || ''),
+      announcement: String(row?.announcement || ''),
+      seoTitle: String(row?.seoTitle || ''),
+      seoDescription: String(row?.seoDescription || ''),
+      updatedAt: row?.updatedAt ? String(row.updatedAt) : null,
+    };
+    this.publicConfigCache = { value, at: Date.now() };
+    return value;
+  }
   async updateSettings(input: { siteName: string; tagline: string; contactEmail: string; defaultLocale: string; maintenance: boolean; registrationOpen: boolean; guestPlay: boolean }, actor: Actor) {
     const row = (await this.settings.list([Query.limit(1)]))[0];
     const data = { platformName: input.siteName, platformDescription: input.tagline, publicSupportEmail: input.contactEmail, defaultLanguage: input.defaultLocale, maintenanceMode: input.maintenance, registrationEnabled: input.registrationOpen, guestAccessEnabled: input.guestPlay, updatedAt: new Date().toISOString(), updatedBy: actor.userId };
     if (row) await this.settings.patch(row.$id, data); else await this.settings.insert({ ...data, maxRoomCapacity: 12, guessRateLimitPerMinute: 30, chatRateLimitPerMinute: 30, emailVerificationRequired: false, allowCustomWords: true });
+    this.publicConfigCache = null;
     await this.writeAudit(actor, 'platform_settings.update', 'platform_settings', 'singleton', 'updated');
     return input;
   }

@@ -76,7 +76,7 @@ Real response from the demo project:
       "category": "News & Updates",
       "tags": [],
       "status": "published",
-      "cover": "/assets/achievements/winner.png",
+      "cover": "/assets/achievements/winner.webp",
       "author": "DrawSpace Team",
       "seoTitle": "",
       "seoDescription": "",

@@ -4,8 +4,10 @@ const WORD_CORE_COLUMNS = ['id', 'word', 'category', 'difficulty', 'isActive'];
 const WORD_MIGRATED_COLUMNS = [...WORD_CORE_COLUMNS, 'language', 'hint', 'normalizedWord', 'createdAt', 'updatedAt'];
 const POST_CORE_COLUMNS = ['id', 'slug', 'title', 'excerpt', 'content', 'categoryId', 'status', 'featuredImage', 'seoTitle', 'seoDescription', 'publishedAt', 'authorId', 'authorName', 'views', 'createdAt', 'updatedAt'];
 const POST_MIGRATED_COLUMNS = [...POST_CORE_COLUMNS, 'tags'];
+const POST_STUDIO_COLUMNS = [...POST_MIGRATED_COLUMNS, 'studioDoc'];
+const TEMPLATE_COLUMNS = ['id', 'name', 'description', 'doc', 'createdBy', 'createdAt'];
 
-export interface ContentDoubleOptions { migrated?: boolean; withWordCategories?: boolean }
+export interface ContentDoubleOptions { migrated?: boolean; withWordCategories?: boolean; studio?: boolean }
 
 export function createContentDouble(options: ContentDoubleOptions = {}) {
   const dbRows = new Map<string, Map<string, Record<string, unknown>>>();
@@ -14,6 +16,7 @@ export function createContentDouble(options: ContentDoubleOptions = {}) {
   const tables = {
     async listRows(_db: string, table: string) {
       if (table === 'word_categories' && !options.withWordCategories) throw notFound();
+      if (table === 'blog_templates' && !options.studio) throw notFound();
       return { rows: [...(dbRows.get(table)?.values() || [])], total: dbRows.get(table)?.size || 0 };
     },
     async createRow(_db: string, table: string, id: string, data: Record<string, unknown>) {
@@ -37,7 +40,11 @@ export function createContentDouble(options: ContentDoubleOptions = {}) {
     },
     async listColumns(_db: string, table: string) {
       if (table === 'custom_words') return { columns: (options.migrated ? WORD_MIGRATED_COLUMNS : WORD_CORE_COLUMNS).map((key) => ({ key })) };
-      if (table === 'blog_posts') return { columns: (options.migrated ? POST_MIGRATED_COLUMNS : POST_CORE_COLUMNS).map((key) => ({ key })) };
+      if (table === 'blog_posts') {
+        const keys = options.studio ? POST_STUDIO_COLUMNS : options.migrated ? POST_MIGRATED_COLUMNS : POST_CORE_COLUMNS;
+        return { columns: keys.map((key) => ({ key, size: key === 'content' ? 10000 : key === 'studioDoc' ? 500000 : undefined })) };
+      }
+      if (table === 'blog_templates' && options.studio) return { columns: TEMPLATE_COLUMNS.map((key) => ({ key })) };
       throw notFound();
     },
   };

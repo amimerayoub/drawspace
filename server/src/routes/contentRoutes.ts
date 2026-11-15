@@ -4,7 +4,7 @@ import type { Request, Response } from 'express';
 import type { JwtVerifier } from '../auth/verifyJwt';
 import { identityFrom, requireAuth } from '../auth/middleware';
 import { HttpError } from '../middleware/errors';
-import { requireAdmin } from '../middleware/authorize';
+import { requirePermission } from '../middleware/authorize';
 import type { AdminRoleRepository } from '../repositories/adminRoleRepository';
 import type { AdminDataRepository } from '../repositories/adminDataRepository';
 
@@ -18,26 +18,29 @@ const paramId = (request: Request) => { const value = request.params.id; return 
 export function contentRoutes(verify: JwtVerifier, roles: AdminRoleRepository, data: AdminDataRepository): Router {
   const router = Router();
   const admin = requireAuth(verify);
-  const editors = requireAdmin(roles, ['superadmin', 'admin', 'content_manager']);
-  const admins = requireAdmin(roles, ['superadmin', 'admin']);
-  router.get('/words', admin, editors, async (_req, res, next) => { try { res.json({ data: await data.listWords() }); } catch (e) { next(e); } });
-  router.put('/words/:id', admin, editors, async (req, res, next) => {
+  const wordAccess = requirePermission(roles, 'words.manage');
+  const blogAccess = requirePermission(roles, 'content.blog');
+  const adAccess = requirePermission(roles, 'content.ads');
+  const settingsAccess = requirePermission(roles, 'settings.manage');
+  const auditAccess = requirePermission(roles, 'audit.view');
+  router.get('/words', admin, wordAccess, async (_req, res, next) => { try { res.json({ data: await data.listWords() }); } catch (e) { next(e); } });
+  router.put('/words/:id', admin, wordAccess, async (req, res, next) => {
     try { const input = wordSchema.safeParse({ ...req.body, id: paramId(req) }); if (!input.success) throw new HttpError(400, 'Invalid word', 'VALIDATION_ERROR'); res.json({ data: await data.saveWord(input.data, actorFrom(req, res)) }); }
     catch (e) { next(e); }
   });
-  router.delete('/words/:id', admin, editors, async (req, res, next) => { try { await data.deleteWord(paramId(req), actorFrom(req, res)); res.json({ data: { deleted: true } }); } catch (e) { next(e instanceof Error && e.message === 'Word not found.' ? new HttpError(404, e.message, 'WORD_NOT_FOUND') : e); } });
-  router.get('/blog', admin, editors, async (_req, res, next) => { try { res.json({ data: await data.listPosts(true) }); } catch (e) { next(e); } });
-  router.put('/blog/:id', admin, editors, async (req, res, next) => {
+  router.delete('/words/:id', admin, wordAccess, async (req, res, next) => { try { await data.deleteWord(paramId(req), actorFrom(req, res)); res.json({ data: { deleted: true } }); } catch (e) { next(e instanceof Error && e.message === 'Word not found.' ? new HttpError(404, e.message, 'WORD_NOT_FOUND') : e); } });
+  router.get('/blog', admin, blogAccess, async (_req, res, next) => { try { res.json({ data: await data.listPosts(true) }); } catch (e) { next(e); } });
+  router.put('/blog/:id', admin, blogAccess, async (req, res, next) => {
     try { const input = postSchema.safeParse({ ...req.body, id: paramId(req) }); if (!input.success) throw new HttpError(400, 'Invalid blog post', 'VALIDATION_ERROR'); res.json({ data: await data.savePost({ ...input.data, content: input.data.body.join('\n\n') }, actorFrom(req, res)) }); }
     catch (e) { next(e); }
   });
-  router.delete('/blog/:id', admin, editors, async (req, res, next) => { try { await data.deletePost(paramId(req), actorFrom(req, res)); res.json({ data: { deleted: true } }); } catch (e) { next(e instanceof Error && e.message === 'Blog post not found.' ? new HttpError(404, e.message, 'POST_NOT_FOUND') : e); } });
-  router.get('/ads', admin, editors, async (_req, res, next) => { try { res.json({ data: await data.listAds() }); } catch (e) { next(e); } });
-  router.put('/ads/:id', admin, editors, async (req, res, next) => { try { const input = adSchema.safeParse({ ...req.body, id: paramId(req) }); if (!input.success) throw new HttpError(400, 'Invalid advertisement', 'VALIDATION_ERROR'); await data.saveAd(input.data, actorFrom(req, res)); res.json({ data: input.data }); } catch (e) { next(e); } });
-  router.delete('/ads/:id', admin, editors, async (req, res, next) => { try { await data.deleteAd(paramId(req), actorFrom(req, res)); res.json({ data: { deleted: true } }); } catch (e) { next(e instanceof Error && e.message === 'Advertisement not found.' ? new HttpError(404, e.message, 'AD_NOT_FOUND') : e); } });
-  router.get('/settings', admin, admins, async (_req, res, next) => { try { res.json({ data: await data.getSettings() }); } catch (e) { next(e); } });
-  router.put('/settings', admin, admins, async (req, res, next) => { try { const input = settingsSchema.safeParse(req.body); if (!input.success) throw new HttpError(400, 'Invalid platform settings', 'VALIDATION_ERROR'); res.json({ data: await data.updateSettings(input.data, actorFrom(req, res)) }); } catch (e) { next(e); } });
-  router.get('/audit', admin, requireAdmin(roles), async (_req, res, next) => { try { res.json({ data: await data.listAudit() }); } catch (e) { next(e); } });
+  router.delete('/blog/:id', admin, blogAccess, async (req, res, next) => { try { await data.deletePost(paramId(req), actorFrom(req, res)); res.json({ data: { deleted: true } }); } catch (e) { next(e instanceof Error && e.message === 'Blog post not found.' ? new HttpError(404, e.message, 'POST_NOT_FOUND') : e); } });
+  router.get('/ads', admin, adAccess, async (_req, res, next) => { try { res.json({ data: await data.listAds() }); } catch (e) { next(e); } });
+  router.put('/ads/:id', admin, adAccess, async (req, res, next) => { try { const input = adSchema.safeParse({ ...req.body, id: paramId(req) }); if (!input.success) throw new HttpError(400, 'Invalid advertisement', 'VALIDATION_ERROR'); await data.saveAd(input.data, actorFrom(req, res)); res.json({ data: input.data }); } catch (e) { next(e); } });
+  router.delete('/ads/:id', admin, adAccess, async (req, res, next) => { try { await data.deleteAd(paramId(req), actorFrom(req, res)); res.json({ data: { deleted: true } }); } catch (e) { next(e instanceof Error && e.message === 'Advertisement not found.' ? new HttpError(404, e.message, 'AD_NOT_FOUND') : e); } });
+  router.get('/settings', admin, settingsAccess, async (_req, res, next) => { try { res.json({ data: await data.getSettings() }); } catch (e) { next(e); } });
+  router.put('/settings', admin, settingsAccess, async (req, res, next) => { try { const input = settingsSchema.safeParse(req.body); if (!input.success) throw new HttpError(400, 'Invalid platform settings', 'VALIDATION_ERROR'); res.json({ data: await data.updateSettings(input.data, actorFrom(req, res)) }); } catch (e) { next(e); } });
+  router.get('/audit', admin, auditAccess, async (_req, res, next) => { try { res.json({ data: await data.listAudit() }); } catch (e) { next(e); } });
   return router;
 }
 
@@ -54,5 +57,11 @@ export function publicAdRoutes(data: AdminDataRepository): Router {
     try { const placement = z.enum(['landing', 'blog']).safeParse(Array.isArray(req.params.placement) ? req.params.placement[0] : req.params.placement); if (!placement.success) throw new HttpError(400, 'Invalid ad placement', 'VALIDATION_ERROR'); res.json({ data: await data.activeAd(placement.data) }); }
     catch (error) { next(error); }
   });
+  return router;
+}
+
+export function publicConfigRoutes(data: AdminDataRepository): Router {
+  const router = Router();
+  router.get('/', async (_req, res, next) => { try { res.json({ data: await data.getPublicConfig() }); } catch (e) { next(e); } });
   return router;
 }

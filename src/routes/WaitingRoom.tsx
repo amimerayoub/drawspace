@@ -35,6 +35,8 @@ export default function WaitingRoom() {
     let offUpdate = () => {};
     let offRound = () => {};
     let offChoices = () => {};
+    let offClosed = () => {};
+    let offKicked = () => {};
     void socketClient.connect().then(async () => {
       offUpdate = socketClient.on<WaitingRoomData>('room:update', (updated) => {
         if (!active || updated.code !== cleanCode) return;
@@ -43,6 +45,8 @@ export default function WaitingRoom() {
       });
       offRound = socketClient.on('game:round-start', () => navigate(path(`/game/${cleanCode}`), { replace: true }));
       offChoices = socketClient.on('game:word-choices', () => navigate(path(`/game/${cleanCode}`), { replace: true }));
+      offClosed = socketClient.on<{ code: string; reason: string }>('room:closed', (item) => { if (active && item.code === cleanCode) { toast(item.reason, 'error'); navigate(path('/lobby'), { replace: true }); } });
+      offKicked = socketClient.on<{ code: string; reason: string }>('room:kicked', (item) => { if (active && item.code === cleanCode) { toast(item.reason, 'error'); navigate(path('/lobby'), { replace: true }); } });
       const joined = await socketClient.request<{ room: WaitingRoomData }>('room:join', { code: cleanCode });
       if (active) {
         setRoom(joined.room);
@@ -51,7 +55,7 @@ export default function WaitingRoom() {
     }).catch((error: unknown) => {
       if (active) setLoadError(error instanceof Error ? error.message : 'Could not load this room.');
     });
-    return () => { active = false; offUpdate(); offRound(); offChoices(); };
+    return () => { active = false; offUpdate(); offRound(); offChoices(); offClosed(); offKicked(); };
   }, [cleanCode, navigate, path]);
 
   const currentPlayer = useMemo(() => room?.players.find((player) => player.userId === user?.id), [room, user?.id]);

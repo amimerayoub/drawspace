@@ -49,6 +49,13 @@ class SocketClient {
     return () => { this.socket?.off(event, listener); };
   }
 
+  onReconnect(listener: () => void): () => void {
+    const manager = this.socket?.io;
+    if (!manager) return () => undefined;
+    manager.on('reconnect', listener);
+    return () => { manager.off('reconnect', listener); };
+  }
+
   emit(event: string, payload?: unknown): void { this.socket?.emit(event, payload); }
   get connected(): boolean { return Boolean(this.socket?.connected); }
   disconnect(): void { this.socket?.disconnect(); this.socket = null; }

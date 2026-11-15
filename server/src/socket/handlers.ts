@@ -4,6 +4,7 @@ import type { Server, Socket } from 'socket.io';
 import type { JwtVerifier } from '../auth/verifyJwt';
 import type { AppwriteDatabase } from '../database/appwrite';
 import { GameEngine, GameError, type PlayerIdentity, type RoomSettings, type Stroke } from '../game/engine';
+import type { RoomAdminBroadcaster } from '../game/roomAdmin';
 import type { ProfileRepository } from '../repositories/profileRepository';
 import { ProgressionRepository } from '../repositories/progressionRepository';
 import { WordRepository } from '../repositories/wordRepository';
@@ -45,7 +46,7 @@ const strokeSchema = z.object({
   points: z.array(z.object({ x: z.number().min(0).max(1), y: z.number().min(0).max(1) }).strict()).min(1).max(500),
 }).strict();
 
-export async function createSocketHandlers(io: Server, deps: SocketDependencies): Promise<void> {
+export async function createSocketHandlers(io: Server, deps: SocketDependencies): Promise<RoomAdminBroadcaster> {
   const words = new WordRepository(deps.wordsDatabase);
   const progression = new ProgressionRepository(deps.wordsDatabase);
   const roundTimeouts = new Map<string, NodeJS.Timeout>();
@@ -116,11 +117,11 @@ export async function createSocketHandlers(io: Server, deps: SocketDependencies)
           socket.emit('game:word-choices', deps.game.publicRoom(room, identity.userId).choices);
         } else if (room.status === 'drawing') {
           const answer = await deps.game.getRoundAnswer(room.code);
-          socket.emit('game:round-start', { round: room.round, drawerUserId: room.drawerUserId, deadline: room.deadline, wordLength: answer?.length ?? 0 });
+          socket.emit('game:round-start', { round: room.round, turnId: room.turnId, drawerUserId: room.drawerUserId, deadline: room.deadline, wordLength: answer?.length ?? 0 });
           if (room.drawerUserId === identity.userId) socket.emit('game:your-word', { word: answer });
-          socket.emit('game:drawing-state', { strokes: deps.game.publicRoom(room).strokes });
+          socket.emit('game:drawing-state', { strokes: deps.game.publicRoom(room).strokes, turnId: room.turnId });
         } else if (room.status === 'round_end' || room.status === 'finished') {
-          socket.emit('game:round-end', { round: room.round, word: await deps.game.getRoundAnswer(room.code), scores: [...room.players.values()].map((player) => ({ userId: player.userId, score: player.score })) });
+          socket.emit('game:round-end', { round: room.round, turnId: room.turnId, word: await deps.game.getRoundAnswer(room.code), scores: [...room.players.values()].map((player) => ({ userId: player.userId, score: player.score })) });
           if (room.status === 'finished') {
             const standings = [...room.players.values()].sort((a, b) => b.score - a.score || a.joinedAt - b.joinedAt);
             socket.emit('game:match-end', { roomCode: room.code, standings: standings.map((player, index) => ({ place: index + 1, userId: player.userId, username: player.username, avatarId: player.avatarId, score: player.score })) });
@@ -177,9 +178,9 @@ export async function createSocketHandlers(io: Server, deps: SocketDependencies)
 
     socket.on('game:stroke', async (payload: unknown, ack?: Ack) => {
       try {
-        const parsed = z.object({ code: codeSchema }).extend({ stroke: strokeSchema }).strict().parse(payload);
-        const room = await deps.game.addStroke(parsed.code, identity.userId, parsed.stroke as Stroke, socket.id);
-        io.to(room.code).emit('game:stroke', parsed.stroke); ack?.({ success: true });
+        const parsed = z.object({ code: codeSchema, turnId: z.number().int().min(0) }).extend({ stroke: strokeSchema }).strict().parse(payload);
+        const room = await deps.game.addStroke(parsed.code, identity.userId, parsed.stroke as Stroke, socket.id, parsed.turnId);
+        io.to(room.code).emit('game:stroke', { stroke: parsed.stroke, turnId: room.turnId }); ack?.({ success: true });
       } catch (error) { respondError(ack, error); }
     });
 
@@ -188,7 +189,7 @@ export async function createSocketHandlers(io: Server, deps: SocketDependencies)
         try {
           const parsed = z.object({ code: codeSchema }).strict().parse(payload);
           const room = await deps.game.replaceStrokes(parsed.code, identity.userId, action, socket.id);
-          io.to(room.code).emit('game:drawing-state', { strokes: deps.game.publicRoom(room).strokes }); ack?.({ success: true });
+          io.to(room.code).emit('game:drawing-state', { strokes: deps.game.publicRoom(room).strokes, turnId: room.turnId }); ack?.({ success: true });
         } catch (error) { respondError(ack, error); }
       });
     }
@@ -196,7 +197,7 @@ export async function createSocketHandlers(io: Server, deps: SocketDependencies)
       try {
         const parsed = z.object({ code: codeSchema }).strict().parse(payload);
         const room = await deps.game.clearDrawing(parsed.code, identity.userId, socket.id);
-        io.to(room.code).emit('game:drawing-state', { strokes: [] }); ack?.({ success: true });
+        io.to(room.code).emit('game:drawing-state', { strokes: [], turnId: room.turnId }); ack?.({ success: true });
       } catch (error) { respondError(ack, error); }
     });
 
@@ -277,7 +278,7 @@ export async function createSocketHandlers(io: Server, deps: SocketDependencies)
     const choiceTimeout = choiceTimeouts.get(code); if (choiceTimeout) clearTimeout(choiceTimeout);
     choiceTimeouts.delete(code);
     const { room, word } = await deps.game.chooseWord(code, drawerId, wordId, socketId);
-    io.to(room.code).emit('game:round-start', { round: room.round, drawerUserId: room.drawerUserId, deadline: room.deadline, wordLength: word.length });
+    io.to(room.code).emit('game:round-start', { round: room.round, turnId: room.turnId, drawerUserId: room.drawerUserId, deadline: room.deadline, wordLength: word.length });
     io.to(room.players.get(drawerId)?.lastSocketId ?? '').emit('game:your-word', { word });
     io.to(room.code).emit('room:update', deps.game.publicRoom(room));
     scheduleRound(room.code, room.deadline);
@@ -305,7 +306,7 @@ export async function createSocketHandlers(io: Server, deps: SocketDependencies)
       }
       const ended = await deps.game.claimRoundEnd(code);
       if (!ended) return;
-      io.to(code).emit('game:round-end', { round: ended.round, word, scores: [...ended.players.values()].map((p) => ({ userId: p.userId, score: p.score })) });
+      io.to(code).emit('game:round-end', { round: ended.round, turnId: ended.turnId, word, scores: [...ended.players.values()].map((p) => ({ userId: p.userId, score: p.score })) });
       io.to(code).emit('room:update', deps.game.publicRoom(ended));
       if (ended.status === 'finished') {
         const standings = [...ended.players.values()].sort((a, b) => b.score - a.score || a.joinedAt - b.joinedAt);
@@ -374,6 +375,22 @@ export async function createSocketHandlers(io: Server, deps: SocketDependencies)
     }
   })().catch(error=>console.error('[room-recovery-sweep]',error instanceof Error?error.name:'unknown'));},1000);
   recoverySweep.unref();
+
+  return {
+    roomClosed(room) {
+      clearTimers(room.code);
+      for (const player of room.players.values()) io.to(player.lastSocketId).emit('room:closed', { code: room.code, reason: 'This room was closed by a moderator.' });
+      io.in(room.code).socketsLeave(room.code);
+    },
+    playerKicked(code, _userId, socketId, room) {
+      if (socketId) {
+        io.to(socketId).emit('room:kicked', { code, reason: 'You were removed from the room by a moderator.' });
+        io.in(socketId).socketsLeave(code);
+      }
+      if (room) io.to(room.code).emit('room:update', deps.game.publicRoom(room));
+      else clearTimers(code);
+    },
+  };
 }
 
 function respondError(ack: Ack | undefined, error: unknown) {
