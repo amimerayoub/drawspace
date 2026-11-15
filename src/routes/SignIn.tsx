@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { UserRound } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { useI18n } from '@/i18n/I18nContext';
@@ -13,6 +13,9 @@ export default function SignIn() {
   const { signIn } = useAuth();
   const { toast } = useToast();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const nextParam = searchParams.get('next');
+  const safeNext = nextParam && nextParam.startsWith('/') && !nextParam.startsWith('//') && !nextParam.includes(':') ? nextParam : null;
   const [identity, setIdentity] = useState('');
   const [password, setPassword] = useState('');
   const [touched, setTouched] = useState<Record<string, boolean>>({});
@@ -36,7 +39,7 @@ export default function SignIn() {
       const user = await signIn(identity.trim(), password);
       toast(t('auth.welcome', { name: user.username }), 'success');
       const isAdmin = user.role === 'admin' || user.role === 'superadmin' || user.role === 'moderator' || user.role === 'support';
-      navigate(isAdmin ? '/admin' : path('/play'));
+      navigate(safeNext ?? (isAdmin ? '/admin' : path('/play')));
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {

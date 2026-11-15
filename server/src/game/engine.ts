@@ -99,7 +99,7 @@ export class GameEngine {
   async start(code: string, userId: string, socketId?: string): Promise<{ room: Room; drawer: Player }> { return this.run(() => this.startLocal(code, userId, socketId)); }
   async setWordChoices(code: string, drawerId: string, choices: WordChoice[]): Promise<Room> { return this.run(() => this.setWordChoicesLocal(code, drawerId, choices)); }
   async chooseWord(code: string, userId: string, wordId: string, socketId?: string): Promise<{ room: Room; word: string }> { return this.run(() => this.chooseWordLocal(code, userId, wordId, socketId)); }
-  async guess(code: string, userId: string, rawGuess: string, socketId?: string): Promise<{ room: Room; correct: boolean; points: number; word?: string; roundEnded: boolean }> { return this.run(() => this.guessLocal(code, userId, rawGuess, socketId)); }
+  async guess(code: string, userId: string, rawGuess: string, socketId?: string, turnId?: number): Promise<{ room: Room; correct: boolean; points: number; word?: string; roundEnded: boolean }> { return this.run(() => this.guessLocal(code, userId, rawGuess, socketId, turnId)); }
   async addStroke(code: string, userId: string, stroke: Stroke, socketId?: string, turnId?: number): Promise<Room> { return this.run(() => this.addStrokeLocal(code, userId, stroke, socketId, turnId)); }
   async replaceStrokes(code: string, userId: string, action: 'undo' | 'redo', socketId?: string): Promise<Room> { return this.run(() => this.replaceStrokesLocal(code, userId, action, socketId)); }
   async clearDrawing(code: string, userId: string, socketId?: string): Promise<Room> { return this.run(() => this.clearDrawingLocal(code, userId, socketId)); }
@@ -225,9 +225,10 @@ export class GameEngine {
     return { room, word: choice.word };
   }
 
-  private guessLocal(code: string, userId: string, rawGuess: string, socketId?: string): { room: Room; correct: boolean; points: number; word?: string; roundEnded: boolean } {
+  private guessLocal(code: string, userId: string, rawGuess: string, socketId?: string, turnId?: number): { room: Room; correct: boolean; points: number; word?: string; roundEnded: boolean } {
     const room = this.requireRoom(code); const player = this.requirePlayer(room, userId, socketId);
     if (room.status !== 'drawing' || !room.secretWord) throw new GameError('There is no open round.', 'ROUND_NOT_ACTIVE');
+    if (turnId !== undefined && turnId !== room.turnId) throw new GameError('This guess belongs to a previous round.', 'STALE_TURN');
     if (this.now() >= room.deadline) { this.endRoundLocal(room.code); throw new GameError('The round timer has expired.', 'ROUND_EXPIRED'); }
     if (userId === room.drawerUserId) throw new GameError('The drawer cannot submit guesses.', 'NOT_DRAWER');
     if (player.hasGuessed) return { room, correct: false, points: 0, roundEnded: false };
@@ -346,7 +347,7 @@ export class GameEngine {
   }
 
   private addPlayer(room: Room, identity: PlayerIdentity, socketId: string, host: boolean) {
-    const player: Player = { ...identity, isGuest: Boolean(identity.isGuest), score: 0, ready: host, connected: true, host, joinedAt: this.now(), lastSocketId: socketId, hasGuessed: false, correctGuesses: 0, totalGuesses: 0 };
+    const player: Player = { ...identity, isGuest: Boolean(identity.isGuest), score: 0, ready: true, connected: true, host, joinedAt: this.now(), lastSocketId: socketId, hasGuessed: false, correctGuesses: 0, totalGuesses: 0 };
     room.players.set(identity.userId, player); room.order.push(identity.userId); this.userRooms.set(identity.userId, room.code);
   }
   private setDrawer(room: Room): Player {

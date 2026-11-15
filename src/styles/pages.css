@@ -382,3 +382,6 @@
   .waiting-code-value { font-size: var(--text-lg); }
   .room-row { flex-wrap: wrap; }
 }
+
+.join-code-display { font-size: var(--text-lg); letter-spacing: 0.12em; }
+.join-signin { text-align: center; font-size: var(--text-sm); margin-top: var(--space-2); }

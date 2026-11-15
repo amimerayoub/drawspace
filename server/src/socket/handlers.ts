@@ -59,6 +59,7 @@ export async function createSocketHandlers(io: Server, deps: SocketDependencies)
   const persistingMatches = new Set<string>();
   let settingsCache: { value: Awaited<ReturnType<GameSettingsRepository['get']>>; at: number } | null = null;
   const guessTimesByUser = new Map<string, number[]>();
+  const joinAttemptsByUser = new Map<string, number[]>();
   async function gameSettings() {
     if (!deps.gameSettings) return { maxPlayers: 12, guessRateLimitPerMinute: 60, chatRateLimitPerMinute: 30, allowCustomWords: true };
     if (!settingsCache || Date.now() - settingsCache.at > 5_000) settingsCache = { value: await deps.gameSettings.get(), at: Date.now() };
@@ -103,6 +104,11 @@ export async function createSocketHandlers(io: Server, deps: SocketDependencies)
 
     socket.on('room:join', async (payload: unknown, ack?: Ack) => {
       try {
+        const joinNow = Date.now();
+        const joinAttempts = joinAttemptsByUser.get(identity.userId) || [];
+        while (joinAttempts.length && joinNow - joinAttempts[0] >= 60_000) joinAttempts.shift();
+        if (joinAttempts.length >= 20) throw new GameError('Too many join attempts. Please wait a moment.', 'JOIN_RATE_LIMIT');
+        joinAttempts.push(joinNow); joinAttemptsByUser.set(identity.userId, joinAttempts);
         const parsed = z.object({ code: codeSchema, password: z.string().max(64).optional() }).strict().parse(payload);
         const previous = await deps.game.roomForUser(identity.userId); const previousSocketId = previous?.players.get(identity.userId)?.lastSocketId;
         const { room, reconnected } = await deps.game.join(parsed.code, player, socket.id, parsed.password);
@@ -162,8 +168,8 @@ export async function createSocketHandlers(io: Server, deps: SocketDependencies)
         while (guessTimes.length && now - guessTimes[0] >= 60_000) guessTimes.shift();
         if (guessTimes.length >= Math.min(limits.guessRateLimitPerMinute, limits.chatRateLimitPerMinute)) throw new GameError('Please slow down.', 'GUESS_RATE_LIMIT');
         guessTimes.push(now); guessTimesByUser.set(identity.userId, guessTimes);
-        const parsed = z.object({ code: codeSchema }).merge(guessSchema).strict().parse(payload);
-        const result = await deps.game.guess(parsed.code, identity.userId, parsed.text, socket.id);
+        const parsed = z.object({ code: codeSchema, turnId: z.number().int().min(0).optional() }).merge(guessSchema).strict().parse(payload);
+        const result = await deps.game.guess(parsed.code, identity.userId, parsed.text, socket.id, parsed.turnId);
         if (result.correct) {
           io.to(result.room.code).emit('game:correct-guess', { userId: identity.userId, username: player.username, points: result.points });
           if (result.roundEnded) finishRound(result.room.code, result.word);

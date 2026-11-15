@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, Navigate, useNavigate, useParams } from 'react-router-dom';
-import { Flag, LogOut, MessageCircle, Trophy, Users, Volume2, VolumeX } from 'lucide-react';
+import { Flag, Link2, LogOut, MessageCircle, Trophy, Users, Volume2, VolumeX } from 'lucide-react';
 import type { ChatMessage, RoomPlayer, Stroke } from '@/types';
 import { useI18n } from '@/i18n/I18nContext';
 import { useAuth } from '@/context/AuthContext';
@@ -40,6 +40,7 @@ export default function GameRoom() {
   const [room, setRoom] = useState<RoomSnapshot | null>(null);
   const [phase, setPhase] = useState<'choosing' | 'drawing' | 'reveal' | 'finished'>('choosing');
   const [choices, setChoices] = useState<Choice[]>([]);
+  const [choosingBusy, setChoosingBusy] = useState(false);
   const [answer, setAnswer] = useState<string | null>(null);
   const [wordLength, setWordLength] = useState(0);
   const [deadline, setDeadline] = useState<number | null>(null);
@@ -80,19 +81,20 @@ export default function GameRoom() {
       if (active) syncRoom(joined.room);
     };
     void socketClient.connect().then(async () => {
+      if (!active) return;
       disposers.push(socketClient.on<RoomSnapshot>('room:update', (next) => { if (active && next.code === code) syncRoom(next); }));
-      disposers.push(socketClient.on<Choice[]>('game:word-choices', (items) => { if (active) { setChoices(items); setPhase('choosing'); } }));
+      disposers.push(socketClient.on<Choice[]>('game:word-choices', (items) => { if (active) { setChoices(items); setChoosingBusy(false); setPhase('choosing'); } }));
       disposers.push(socketClient.on<{ word: string }>('game:your-word', (item) => { if (active) setAnswer(item.word); }));
       disposers.push(socketClient.on<{ round: number; turnId: number; drawerUserId: string; deadline: number; wordLength: number }>('game:round-start', (item) => {
-        if (active) { applyTurnId(item.turnId); setPhase('drawing'); setAnswer(null); setChoices([]); setWordLength(item.wordLength); setDeadline(item.deadline); setRemaining(Math.max(0, Math.ceil((item.deadline - Date.now()) / 1000))); setStrokes([]); }
+        if (active) { applyTurnId(item.turnId); setPhase('drawing'); setAnswer(null); setChoices([]); setChoosingBusy(false); setWordLength(item.wordLength); setDeadline(item.deadline); setRemaining(Math.max(0, Math.ceil((item.deadline - Date.now()) / 1000))); setStrokes([]); }
       }));
       disposers.push(socketClient.on<{ remainingSeconds: number; deadline: number }>('game:timer', (item) => { if (active) { setRemaining(item.remainingSeconds); setDeadline(item.deadline); } }));
       disposers.push(socketClient.on<{ stroke: Stroke; turnId: number }>('game:stroke', (item) => { if (active && item.turnId === turnIdRef.current) setStrokes((current) => [...current, item.stroke]); }));
       disposers.push(socketClient.on<{ strokes: Stroke[]; turnId: number }>('game:drawing-state', (state) => { if (active && state.turnId === turnIdRef.current) setStrokes(state.strokes); }));
-      disposers.push(socketClient.on<{ userId: string; username: string; text: string; at: number }>('game:chat', (message) => addMessage({ playerId: message.userId, username: message.username, text: message.text, at: message.at, kind: 'guess' })));
-      disposers.push(socketClient.on<{ userId: string; username: string; points: number }>('game:correct-guess', (message) => addMessage({ playerId: message.userId, username: message.username, text: `guessed correctly (+${message.points})`, at: Date.now(), kind: 'correct' })));
-      disposers.push(socketClient.on<{ round: number; turnId: number; word: string; scores: Array<{ userId: string; score: number }> }>('game:round-end', (item) => { if (active) { setPhase('reveal'); setAnswer(item.word); setStrokes([]); } }));
-      disposers.push(socketClient.on<{ roomCode: string; standings: Standing[] }>('game:match-end', (item) => { if (active) { setStandings(item.standings); setPhase('finished'); } }));
+      disposers.push(socketClient.on<{ userId: string; username: string; text: string; at: number }>('game:chat', (message) => { if (active) addMessage({ playerId: message.userId, username: message.username, text: message.text, at: message.at, kind: 'guess' }); }));
+      disposers.push(socketClient.on<{ userId: string; username: string; points: number }>('game:correct-guess', (message) => { if (active) addMessage({ playerId: message.userId, username: message.username, text: `guessed correctly (+${message.points})`, at: Date.now(), kind: 'correct' }); }));
+      disposers.push(socketClient.on<{ round: number; turnId: number; word: string; scores: Array<{ userId: string; score: number }> }>('game:round-end', (item) => { if (active) { setPhase('reveal'); setAnswer(item.word); setStrokes([]); setChoices([]); setChoosingBusy(false); } }));
+      disposers.push(socketClient.on<{ roomCode: string; standings: Standing[] }>('game:match-end', (item) => { if (active) { setStandings(item.standings); setStrokes([]); setChoices([]); setPhase('finished'); } }));
       disposers.push(socketClient.on<ProgressionAward>('game:progression-earned', (item) => { if (active && !item.duplicate) setProgressionAward(item); }));
       disposers.push(socketClient.on<{ code: string; reason: string }>('room:closed', (item) => { if (active && item.code === code) { toast(item.reason, 'error'); navigate(path('/lobby'), { replace: true }); } }));
       disposers.push(socketClient.on<{ code: string; reason: string }>('room:kicked', (item) => { if (active && item.code === code) { toast(item.reason, 'error'); navigate(path('/lobby'), { replace: true }); } }));
@@ -124,7 +126,10 @@ export default function GameRoom() {
   if (!room) return <div className="page container container-narrow">{loadingError ? <p role="alert">{loadingError} <Link to={path('/lobby')}>Back to lobby</Link></p> : <Spinner label="Connecting to game…" />}</div>;
 
   const sendGuess = (text: string) => {
-    void socketClient.request('game:guess', { code, text }).catch((error) => toast(error instanceof Error ? error.message : 'Guess could not be sent.', 'error'));
+    void socketClient.request('game:guess', { code, text, turnId: turnIdRef.current }).catch((error) => {
+      if (error instanceof ApiError && ['STALE_TURN', 'ROUND_EXPIRED', 'ROUND_NOT_ACTIVE'].includes(error.code ?? '')) return;
+      toast(error instanceof Error ? error.message : 'Guess could not be sent.', 'error');
+    });
     return 'chat' as const;
   };
   const leave = async () => {
@@ -132,8 +137,15 @@ export default function GameRoom() {
     navigate(path('/lobby'));
   };
   const choose = async (item: Choice) => {
+    if (choosingBusy) return;
+    setChoosingBusy(true);
     try { await socketClient.request('game:choose-word', { code, id: item.id }); setChoices([]); }
-    catch (error) { toast(error instanceof Error ? error.message : 'Word choice failed.', 'error'); }
+    catch (error) { setChoosingBusy(false); toast(error instanceof Error ? error.message : 'Word choice failed.', 'error'); }
+  };
+  const copyInvite = async () => {
+    const invite = `${window.location.origin}/join/${code}`;
+    try { await navigator.clipboard.writeText(invite); toast(t('toast.linkCopied'), 'success'); }
+    catch { toast(invite); }
   };
   const sendStroke = (stroke: Stroke) => {
     void socketClient.request('game:stroke', { code, stroke, turnId: turnIdRef.current }).catch((error) => {
@@ -159,29 +171,85 @@ export default function GameRoom() {
   const pct = Math.max(0, Math.min(100, room.settings.roundSeconds ? (remaining / room.settings.roundSeconds) * 100 : 0));
 
   return (
-    <div className="game-shell">
+    <div className={`game-shell ${phase === 'finished' ? 'finished' : ''}`}>
       <SeoHead title={`${room.name} · DrawSpace`} />
       <header className="game-topbar">
         <div className="game-top-left"><Link to={path('/')} className="game-brand" aria-label="DrawSpace">✦</Link><div className="game-room-meta"><span className="game-room-name">{room.name}</span><span className="game-round faint">{t('game.roundOf', { current: room.round, total: room.rounds })}</span></div></div>
         <div className="game-word-area">
-          {phase === 'choosing' && isDrawer
-            ? <span className="faint game-choosing-note">{t('game.chooseWord')}</span>
-            : phase === 'choosing'
-              ? <span className="faint game-choosing-note">{t('game.drawer', { name: drawer?.username ?? '' })}</span>
-              : answer
-                ? <span className="word-display word-known mono">{answer}</span>
-                : <span className="word-display mono" aria-label={`${wordLength} letters`}>{Array.from({ length: wordLength }, (_, index) => <span key={index} className="word-letter">_</span>)}</span>}
+          {phase === 'finished'
+            ? <span className="faint game-choosing-note">{t('game.matchOver')}</span>
+            : phase === 'choosing' && isDrawer
+              ? <span className="faint game-choosing-note">{t('game.chooseWord')}</span>
+              : phase === 'choosing'
+                ? <span className="faint game-choosing-note">{t('game.drawer', { name: drawer?.username ?? '' })}</span>
+                : answer
+                  ? <span className="word-display word-known mono">{answer}</span>
+                  : <span className="word-display mono" aria-label={`${wordLength} letters`}>{Array.from({ length: wordLength }, (_, index) => <span key={index} className="word-letter">_</span>)}</span>}
         </div>
         <div className="game-top-right"><div className={`game-timer ${remaining <= 5 && phase === 'drawing' ? 'urgent' : ''}`} role="timer"><span className="mono game-timer-value">{phase === 'drawing' ? remaining : 0}</span><span className="faint game-timer-unit">s</span></div><button className="icon-button" onClick={toggleSound} aria-label={soundOn ? t('common.soundOn') : t('common.soundOff')}>{soundOn ? <Volume2 size={17} /> : <VolumeX size={17} />}</button><Button variant="ghost" size="sm" icon={<Flag size={15} />} onClick={() => setReportOpen(true)}>Report</Button><Button variant="ghost" size="sm" icon={<LogOut size={15} />} onClick={() => void leave()}>{t('common.leave')}</Button></div>
       </header>
       <div className="game-timer-bar" aria-hidden><div className="game-timer-fill" style={{ width: `${pct}%` }} /></div>
       <main className="game-main">
         <section className="game-canvas-col">
-          {phase === 'choosing' && isDrawer && choices.length > 0 && <div className="panel panel-pad"><p>{t('game.chooseWord')}</p><div className="word-choice-grid">{choices.map((item) => <Button key={item.id} variant="secondary" onClick={() => void choose(item)}>{item.word} <span className="faint">{item.category}</span></Button>)}</div></div>}
-          {phase === 'choosing' && !isDrawer && <div className="panel panel-pad"><Spinner label="Waiting for the drawer to choose a word…" /></div>}
-          {phase === 'reveal' && answer && <div className="panel panel-pad"><p>Round complete: <strong>{answer}</strong></p></div>}
-          {phase === 'finished' && <div className="panel panel-pad"><h2><Trophy size={18} /> {t('results.title')}</h2><ol>{standings.map((entry) => <li key={entry.userId}>{entry.place}. {entry.username} — {entry.score}</li>)}</ol>{progressionAward && <p className="accent">+{progressionAward.xp} XP earned · {progressionAward.totalXP} XP total</p>}<Button variant="primary" onClick={() => navigate(path('/lobby'))}>{t('results.backToLobby')}</Button></div>}
-          <div className="game-canvas-frame"><DrawingCanvas interactive={Boolean(isDrawer && phase === 'drawing')} replayStrokes={strokes} resetKey={turnId} onStroke={sendStroke} onUndo={() => sendDrawingAction('undo')} onRedo={() => sendDrawingAction('redo')} onClear={() => sendDrawingAction('clear')} /></div>
+          {phase === 'finished' ? (
+            <div className="game-results">
+              <div className="panel panel-pad results-head">
+                <h2 className="results-title"><Trophy size={18} aria-hidden /> {t('results.title')}</h2>
+                {standings[0] && <p className="results-winner-name">{t('results.winner', { name: standings[0].username })}</p>}
+              </div>
+              <ol className="panel results-standings">
+                {standings.map((entry) => (
+                  <li key={entry.userId} className={`results-row ${entry.userId === user.id ? 'me' : ''} ${entry.place === 1 ? 'first' : ''}`}>
+                    <span className={`results-place mono ${entry.place <= 3 ? 'top' : ''}`}>{entry.place}</span>
+                    <span className="results-name">{entry.username}</span>
+                    <span className="results-score mono">{entry.score}</span>
+                  </li>
+                ))}
+              </ol>
+              {progressionAward && <p className="accent results-xp-note">+{progressionAward.xp} XP · {progressionAward.totalXP} XP</p>}
+              <div className="results-actions">
+                <Button variant="primary" size="lg" onClick={() => void leave()}>{t('results.backToLobby')}</Button>
+                <Button variant="secondary" icon={<Link2 size={15} />} onClick={() => void copyInvite()}>{t('results.copyInvite')}</Button>
+              </div>
+            </div>
+          ) : (
+            <div className="game-canvas-frame">
+              {phase === 'reveal' ? (
+                <div className="canvas-overlay">
+                  <div className="glass-overlay reveal-card">
+                    <p className="faint reveal-label">{t('game.roundComplete')}</p>
+                    <p className="reveal-word">{answer}</p>
+                    <p className="faint reveal-next">{t('game.nextSoon')}</p>
+                  </div>
+                </div>
+              ) : (
+                <DrawingCanvas interactive={Boolean(isDrawer && phase === 'drawing')} replayStrokes={strokes} resetKey={turnId} onStroke={sendStroke} onUndo={() => sendDrawingAction('undo')} onRedo={() => sendDrawingAction('redo')} onClear={() => sendDrawingAction('clear')} />
+              )}
+              {phase === 'choosing' && isDrawer && choices.length > 0 && (
+                <div className="canvas-overlay">
+                  <div className="glass-overlay word-choice" role="dialog" aria-modal="true" aria-label={t('game.chooseWord')}>
+                    <p className="word-choice-title">{t('game.chooseWord')}</p>
+                    <div className="word-choice-grid">
+                      {choices.map((item) => (
+                        <button key={item.id} type="button" className="word-choice-card" disabled={choosingBusy} onClick={() => void choose(item)}>
+                          <span className="word-choice-word">{item.word}</span>
+                          <span className="word-choice-meta faint">{item.category}</span>
+                        </button>
+                      ))}
+                    </div>
+                    <p className="faint word-choice-foot">{t('game.chooseAuto')}</p>
+                  </div>
+                </div>
+              )}
+              {phase === 'choosing' && (!isDrawer || choices.length === 0) && (
+                <div className="canvas-overlay">
+                  <div className="glass-overlay word-waiting">
+                    <Spinner label={isDrawer ? t('game.chooseWord') : t('game.drawer', { name: drawer?.username ?? '' })} />
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </section>
         <div className="game-side-stack">
           <div className="game-tabs" role="group" aria-label={t('game.panelTabs')}>

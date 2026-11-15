@@ -8,7 +8,9 @@ const host={userId:'host-1',username:'Host',avatarId:'av-01'};const guest={userI
 test('room lifecycle enforces password, host, readiness, and offered words',async()=>{
  const game=new GameEngine(()=>1000);const room=await game.createRoom(host,settings,'socket-host');
  await assert.rejects(()=>game.join(room.code,guest,'socket-guest','wrong'),GameError);await game.join(room.code,guest,'socket-guest','draw safely');
- await assert.rejects(()=>game.start(room.code,guest.userId),(e:GameError)=>e.code==='NOT_HOST');await assert.rejects(()=>game.start(room.code,host.userId),(e:GameError)=>e.code==='PLAYERS_NOT_READY');
+ await assert.rejects(()=>game.start(room.code,guest.userId),(e:GameError)=>e.code==='NOT_HOST');
+ assert.equal((await game.get(room.code)).players.get(guest.userId)?.ready,true);
+ await game.setReady(room.code,guest.userId,false);await assert.rejects(()=>game.start(room.code,host.userId),(e:GameError)=>e.code==='PLAYERS_NOT_READY');
  await game.setReady(room.code,guest.userId,true);const started=await game.start(room.code,host.userId);await game.setWordChoices(room.code,started.drawer.userId,[{id:'w1',word:'otter',category:'animal'},{id:'w2',word:'bridge',category:'place'}]);
  await assert.rejects(()=>game.chooseWord(room.code,started.drawer.userId,'invalid'),(e:GameError)=>e.code==='INVALID_WORD');await game.chooseWord(room.code,started.drawer.userId,'w1');
  assert.equal(JSON.stringify(game.publicRoom(await game.get(room.code))).includes('otter'),false);assert.equal(JSON.stringify(game.publicRoom(await game.get(room.code),started.drawer.userId)).includes('otter'),false);

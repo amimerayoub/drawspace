@@ -1,5 +1,5 @@
 import { lazy, Suspense, type ReactNode } from 'react';
-import { Navigate, Outlet, Route, Routes } from 'react-router-dom';
+import { Navigate, Outlet, Route, Routes, useParams } from 'react-router-dom';
 import { I18nProvider, LOCALES, DEFAULT_LOCALE, useI18n } from '@/i18n/I18nContext';
 import type { Locale } from '@/types';
 import { useAuth } from '@/context/AuthContext';
@@ -34,6 +34,25 @@ function LocaleLayout({ locale }: { locale: Locale }) {
       <Outlet />
     </I18nProvider>
   );
+}
+
+// Invitation URLs are locale-free (/join/CODE); resolve the UI language from
+// the browser instead of redirecting, so the room code survives the visit.
+function resolveLocale(): Locale {
+  const nav = typeof navigator !== 'undefined' ? navigator.language || '' : '';
+  const exact = LOCALES.find((l) => l.code.toLowerCase() === nav.toLowerCase());
+  if (exact) return exact.code;
+  const base = nav.split('-')[0].toLowerCase();
+  return LOCALES.find((l) => l.code.split('-')[0].toLowerCase() === base)?.code ?? DEFAULT_LOCALE;
+}
+
+function GuestLocaleLayout({ children }: { children: ReactNode }) {
+  return <I18nProvider locale={resolveLocale()}>{children}</I18nProvider>;
+}
+
+function LocaleCodeRedirect({ section }: { section: 'room' | 'game' | 'results' }) {
+  const { code } = useParams();
+  return <Navigate to={`/${resolveLocale()}/${section}/${(code || '').toUpperCase()}`} replace />;
 }
 
 function MaintenanceScreen() {
@@ -83,8 +102,8 @@ const siteRoutes = (
       <Route path="play" element={<Play />} />
       <Route path="lobby" element={<RequireAuth><Lobby /></RequireAuth>} />
       <Route path="create" element={<RequireAuth><CreateRoom /></RequireAuth>} />
-      <Route path="join" element={<RequireAuth><JoinRoom /></RequireAuth>} />
-      <Route path="join/:code" element={<RequireAuth><JoinRoom /></RequireAuth>} />
+      <Route path="join" element={<JoinRoom />} />
+      <Route path="join/:code" element={<JoinRoom />} />
       <Route path="room/:code" element={<RequireAuth><WaitingRoom /></RequireAuth>} />
       <Route path="results/:code" element={<RequireAuth><Results /></RequireAuth>} />
       <Route path="leaderboard" element={<Leaderboard />} />
@@ -109,6 +128,11 @@ export default function App() {
     <Suspense fallback={<div className="page"><Spinner /></div>}>
     <Routes>
       <Route path="/" element={<Navigate to={`/${DEFAULT_LOCALE}`} replace />} />
+      <Route path="/join" element={<GuestLocaleLayout><JoinRoom /></GuestLocaleLayout>} />
+      <Route path="/join/:code" element={<GuestLocaleLayout><JoinRoom /></GuestLocaleLayout>} />
+      <Route path="/room/:code" element={<LocaleCodeRedirect section="room" />} />
+      <Route path="/game/:code" element={<LocaleCodeRedirect section="game" />} />
+      <Route path="/results/:code" element={<LocaleCodeRedirect section="results" />} />
       <Route
         path="/admin/*"
         element={

@@ -91,7 +91,7 @@ export default function WaitingRoom() {
     catch (error) { toast(error instanceof ApiError ? error.message : String(error), 'error'); }
     finally { setBusy(false); }
   };
-  const invite = `${window.location.origin}${path(`/join/${cleanCode}`)}`;
+  const invite = `${window.location.origin}/join/${cleanCode}`;
 
   return (
     <div className="page">

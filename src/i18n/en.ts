@@ -191,6 +191,8 @@ export const en = {
   'join.code': 'Room code',
   'join.passwordRequired': 'This room requires a password.',
   'join.notFound': 'No room found with that code.',
+  'join.guestSub': 'You are invited to room {code}. Pick a display name and join as a guest. No account needed.',
+  'join.haveAccount': 'Have an account? Sign in',
 
   'waiting.title': 'Waiting room',
   'waiting.share': 'Share this code with friends',
@@ -230,6 +232,9 @@ export const en = {
   'game.guessedIt': 'You guessed it',
   'game.waitNext': 'Nice. Waiting for the round to end.',
   'game.drawingTurnOver': 'Drawing turn over',
+  'game.chooseAuto': 'If you do not choose, the first word is picked automatically.',
+  'game.roundComplete': 'Round complete',
+  'game.nextSoon': 'Next round starting soon',
 
   'results.title': 'Match results',
   'results.winner': '{name} wins',
@@ -237,6 +242,7 @@ export const en = {
   'results.wordsFromMatch': 'Words from this match',
   'results.playAgain': 'Play again',
   'results.backToLobby': 'Back to lobby',
+  'results.copyInvite': 'Copy invite link',
   'results.inviteTitle': 'Keep your progress',
   'results.inviteBody': 'Guests keep their score for this session. Create an account to save XP, titles, and match history.',
 

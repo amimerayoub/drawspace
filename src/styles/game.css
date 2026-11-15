@@ -400,3 +400,23 @@
   [data-keyboard='true'] .game-canvas-col { min-height: 0; }
   [data-keyboard='true'] .game-side-stack { flex: 0 0 240px; height: auto; min-height: 0; }
 }
+
+/* Match results replace the canvas once the game is over. */
+.game-shell { padding-bottom: env(safe-area-inset-bottom); }
+.game-results { display: flex; flex-direction: column; gap: var(--space-3); min-height: 0; overflow-y: auto; padding: var(--space-1); }
+.game-results .results-head { text-align: center; }
+.results-title { display: flex; align-items: center; justify-content: center; gap: var(--space-2); font-family: var(--font-display); font-size: var(--text-lg); font-weight: 700; }
+.game-results .results-standings { margin-bottom: 0; flex-shrink: 0; }
+.game-results .results-row { padding: var(--space-2) var(--space-3); }
+.results-xp-note { text-align: center; font-size: var(--text-sm); font-weight: 600; }
+.game-results .results-actions { margin-top: var(--space-2); }
+.word-choice-card:disabled { opacity: 0.5; cursor: default; }
+.word-choice .word-choice-foot { display: block; text-align: center; font-size: var(--text-xs); }
+
+@media (max-width: 1023px) {
+  .game-shell.finished .game-canvas-col { min-height: 0; }
+  .game-shell.finished .game-side-stack { height: min(30dvh, 280px); min-height: 150px; }
+  .game-results { gap: var(--space-2); }
+  .game-results .results-actions { flex-direction: column; align-items: stretch; }
+  .game-results .results-actions .btn { width: 100%; }
+}
