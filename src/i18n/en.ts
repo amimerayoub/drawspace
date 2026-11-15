@@ -295,7 +295,6 @@ export const en = {
   'auth.signUpCta': 'Create account',
   'auth.noAccount': 'New here?',
   'auth.haveAccount': 'Already have an account?',
-  'auth.demoHint': 'Demo: use admin / admin@drawspace.cloud with any password of 4+ characters.',
   'auth.welcome': 'Welcome back, {name}.',
   'auth.created': 'Account created. Welcome, {name}.',
   'auth.guestCta': 'Or play as a guest',

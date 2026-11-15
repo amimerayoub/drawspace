@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { KeyRound, UserRound } from 'lucide-react';
+import { UserRound } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { useI18n } from '@/i18n/I18nContext';
 import { useToast } from '@/context/ToastContext';
@@ -69,10 +69,6 @@ export default function SignIn() {
           <Button type="submit" variant="primary" size="lg" loading={busy} className="auth-submit">
             {t('auth.signInCta')}
           </Button>
-          <p className="auth-demo">
-            <KeyRound size={13} aria-hidden />
-            <span>{t('auth.demoHint')}</span>
-          </p>
         </form>
       </AuthPanel>
     </>

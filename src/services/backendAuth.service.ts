@@ -8,6 +8,11 @@ interface ProfileDto { userId: string; username: string; displayName: string; bi
 interface StatsDto { totalGames: number; gamesWon: number; correctGuesses: number; totalPoints: number; }
 interface AdminDto { role: 'superadmin' | 'admin' | 'moderator' | 'content_manager' | 'analyst'; }
 
+// Appwrite rejects a new session while one is active (e.g. a lingering guest session), so clear it first.
+async function clearActiveSession(): Promise<void> {
+  await appwriteAccount.deleteSession('current').catch(() => undefined);
+}
+
 async function toUser(profile: ProfileDto, email?: string): Promise<User> {
   const [stats, progression, admin] = await Promise.all([
     apiGet<StatsDto>('/api/statistics/me'),
@@ -52,6 +57,7 @@ export const backendAuthService = {
   async signIn(identifier: string, password: string): Promise<User> {
     const email = identifier.trim();
     if (!email.includes('@')) throw new Error('Sign in with the email address on your Appwrite account.');
+    await clearActiveSession();
     await appwriteAccount.createEmailPasswordSession(email, password);
     const account = await appwriteAccount.get();
     return toUser(await apiGet<ProfileDto>('/api/profiles/me'), account.email);
@@ -60,13 +66,14 @@ export const backendAuthService = {
   async signUp(username: string, email: string, password: string): Promise<User> {
     const name = username.trim();
     const account = await appwriteAccount.create(ID.unique(), email.trim().toLowerCase(), password, name);
-    try { await appwriteAccount.createEmailPasswordSession(account.email, password); }
-    catch (error) { throw error; }
+    await clearActiveSession();
+    await appwriteAccount.createEmailPasswordSession(account.email, password);
     const profile = await apiGet<ProfileDto>('/api/profiles/me');
     return toUser(profile, account.email);
   },
 
   async continueAsGuest(username: string, avatarId: string): Promise<User> {
+    await clearActiveSession();
     await appwriteAccount.createAnonymousSession();
     const profile = await apiPost<ProfileDto>('/api/guest/session', { username: username.trim(), avatarId });
     return toUser(profile);
