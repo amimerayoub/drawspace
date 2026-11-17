@@ -11,6 +11,7 @@
     "build": "tsc --noEmit && vite build && node -e \"fs.copyFileSync('dist/index.html', 'dist/200.html')\"",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
+    "optimize:images": "node server/scripts/optimize-static-media.mjs",
     "server": "tsx server/src/index.ts",
     "test": "tsx --test server/src/**/*.test.ts",
     "test:http-e2e": "tsx --test server/src/httpE2e.test.ts",
