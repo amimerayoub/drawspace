@@ -155,8 +155,68 @@ test('HTTP + Socket.IO E2E auth, profile, room lifecycle, match ownership, valid
   const listedRoom = publicRooms.find((room: { code: string }) => room.code === code);
   assert.ok(listedRoom); assert.equal('hostId' in listedRoom, false); assert.equal('userId' in listedRoom.players[0], false);
 
-  // The API-wide limiter is intentionally exercised last because its window is process-local.
-  let status = 0;
-  for (let i = 0; i < 241; i += 1) status = (await fetch(`${base}/api/auth/me`)).status;
-  assert.equal(status, 429);
+  // Rate limiters are exercised last because their windows are process-local.
+  // Guest sessions: 5 per hour per IP.
+  let guestStatus = 0;
+  let guestLimitHeader = '';
+  for (let i = 0; i < 6; i += 1) {
+    const res = await fetch(`${base}/api/guest/session`, { method: 'POST', headers: authA, body: JSON.stringify({ username: 'E2EGuestLimit', avatarId: 'av-01' }) });
+    guestStatus = res.status;
+    guestLimitHeader = res.headers.get('ratelimit-limit') || '';
+    if (i < 5) assert.ok(res.status < 400, `guest session ${i + 1} should succeed`);
+  }
+  assert.equal(guestStatus, 429);
+  assert.equal(guestLimitHeader, '5');
+
+  // Auth: 10 per 15 minutes per IP (three /api/auth/me calls happened earlier).
+  let authStatus = 0;
+  let authLimitHeader = '';
+  let authRetryAfter = '';
+  for (let i = 0; i < 11; i += 1) {
+    const res = await fetch(`${base}/api/auth/me`, { headers: authA });
+    authStatus = res.status;
+    authLimitHeader = res.headers.get('ratelimit-limit') || '';
+    authRetryAfter = res.headers.get('retry-after') || '';
+    if (authStatus === 429) break;
+  }
+  assert.equal(authStatus, 429);
+  assert.equal(authLimitHeader, '10');
+  assert.ok(Number(authRetryAfter) > 0);
+
+  // API-wide: 120 per minute per IP, with RateLimit headers on every response.
+  const firstRooms = await fetch(`${base}/api/rooms`);
+  assert.ok(firstRooms.headers.get('ratelimit-remaining'));
+  assert.ok(firstRooms.headers.get('ratelimit-reset'));
+  let apiStatus = 0;
+  let apiLimitHeader = '';
+  for (let i = 0; i < 130; i += 1) {
+    const res = await fetch(`${base}/api/rooms`);
+    apiStatus = res.status;
+    apiLimitHeader = res.headers.get('ratelimit-limit') || '';
+    if (apiStatus === 429) break;
+  }
+  assert.equal(apiStatus, 429);
+  assert.equal(apiLimitHeader, '120');
+
+  // Socket event flood: a socket exceeding 120 events/min is disconnected.
+  const flooded = new Promise<void>((resolve) => socketB.once('disconnect', () => resolve()));
+  for (let i = 0; i < 130; i += 1) socketB.emit('room:ready', { code: 'AB2345', ready: true });
+  await Promise.race([
+    flooded,
+    new Promise((_resolve, reject) => setTimeout(() => reject(new Error('socket event flood did not disconnect the socket')), 5000)),
+  ]);
+
+  // Socket connections: 30 per minute per IP.
+  let connectionBlocked = false;
+  const extraSockets: Socket[] = [];
+  for (let i = 0; i < 35 && !connectionBlocked; i += 1) {
+    const socket = createSocketClient(base, { auth: { jwt: 'e2e-token-a' }, transports: ['websocket'], reconnection: false, timeout: 3000 });
+    extraSockets.push(socket);
+    await new Promise<void>((resolve) => {
+      socket.once('connect', () => resolve());
+      socket.once('connect_error', (error: Error) => { if (/Too many connections/.test(error.message)) connectionBlocked = true; resolve(); });
+    });
+  }
+  for (const socket of extraSockets) socket.disconnect();
+  assert.ok(connectionBlocked, 'per-IP socket connection limit should reject excess connections');
 });

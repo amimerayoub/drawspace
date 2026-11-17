@@ -55,7 +55,7 @@ export default function Play() {
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 placeholder={t('play.namePlaceholder')}
-                maxLength={16}
+                maxLength={20}
                 autoComplete="off"
                 onKeyDown={(e) => e.key === 'Enter' && start()}
               />

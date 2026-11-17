@@ -7,7 +7,7 @@ import type { AdminRoleRepository } from '../repositories/adminRoleRepository';
 import { HttpError } from '../middleware/errors';
 
 const profilePatch = z.object({
-  username: z.string().trim().min(3).max(32).optional(),
+  username: z.string().trim().min(3).max(20).optional(),
   displayName: z.string().trim().min(1).max(64).optional(),
   bio: z.string().trim().max(500).optional(),
   avatarId: z.string().trim().min(1).max(32).optional(),

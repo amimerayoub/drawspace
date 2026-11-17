@@ -19,7 +19,7 @@ export function matchRoutes(verify: JwtVerifier, history: MatchHistoryRepository
     catch (error) { next(error); }
   });
   router.get('/player/:username', async (req, res, next) => {
-    try { const username = z.string().trim().min(3).max(32).safeParse(req.params.username); const query = querySchema.safeParse(req.query); if (!username.success || !query.success) throw new HttpError(400, 'Invalid player history query.', 'VALIDATION_ERROR'); const profile = await profiles.findUsername(username.data); if (!profile) throw new HttpError(404, 'Player not found.', 'PROFILE_NOT_FOUND'); const result = await history.listForPlayer(profile.userId, query.data.limit, query.data.offset); res.json({ data: result.rows.map(publicPlayer), pagination: { total: result.total, limit: query.data.limit, offset: query.data.offset } }); }
+    try { const username = z.string().trim().min(3).max(20).safeParse(req.params.username); const query = querySchema.safeParse(req.query); if (!username.success || !query.success) throw new HttpError(400, 'Invalid player history query.', 'VALIDATION_ERROR'); const profile = await profiles.findUsername(username.data); if (!profile) throw new HttpError(404, 'Player not found.', 'PROFILE_NOT_FOUND'); const result = await history.listForPlayer(profile.userId, query.data.limit, query.data.offset); res.json({ data: result.rows.map(publicPlayer), pagination: { total: result.total, limit: query.data.limit, offset: query.data.offset } }); }
     catch (error) { next(error); }
   });
   router.get('/admin', requireAuth(verify), requirePermission(roles, 'matches.inspect'), async (req, res, next) => {

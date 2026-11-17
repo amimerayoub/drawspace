@@ -62,6 +62,7 @@ export const backendAuthService = {
 
   async signUp(username: string, email: string, password: string): Promise<User> {
     const name = username.trim();
+    if (name.length < 3 || name.length > 20) throw new Error('Username must be 3 to 20 characters.');
     const account = await appwriteAccount.create(ID.unique(), email.trim().toLowerCase(), password, name);
     await clearActiveSession();
     await appwriteAccount.createEmailPasswordSession(account.email, password);
@@ -70,9 +71,11 @@ export const backendAuthService = {
   },
 
   async continueAsGuest(username: string, avatarId: string): Promise<User> {
+    const name = username.trim();
+    if (name.length < 3 || name.length > 20) throw new Error('Username must be 3 to 20 characters.');
     await clearActiveSession();
     await appwriteAccount.createAnonymousSession();
-    const profile = await apiPost<ProfileDto>('/api/guest/session', { username: username.trim(), avatarId });
+    const profile = await apiPost<ProfileDto>('/api/guest/session', { username: name, avatarId });
     return toUser(profile);
   },
 

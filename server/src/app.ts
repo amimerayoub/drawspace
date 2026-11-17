@@ -1,5 +1,6 @@
 import express from 'express';
 import cors from 'cors';
+import helmet from 'helmet';
 import type { ServerConfig } from './config/env';
 import type { AppwriteDatabase } from './database/appwrite';
 import type { JwtVerifier } from './auth/verifyJwt';
@@ -93,13 +94,15 @@ export function createApp(deps: ApplicationDependencies) {
 
   if (deps.config.nodeEnv === 'production') app.set('trust proxy', 1);
   app.disable('x-powered-by');
-  app.use((_request, response, next) => {
-    response.setHeader('X-Content-Type-Options', 'nosniff');
-    response.setHeader('X-Frame-Options', 'DENY');
-    response.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
-    response.setHeader('Cross-Origin-Resource-Policy', 'same-site');
-    next();
-  });
+  // CSP and HSTS are managed at the Cloudflare edge (see public/_headers and CHANGES.md).
+  app.use(helmet({
+    contentSecurityPolicy: false,
+    hsts: false,
+    crossOriginEmbedderPolicy: false,
+    crossOriginResourcePolicy: { policy: 'same-site' },
+    frameguard: { action: 'deny' },
+    referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
+  }));
   app.use(cors({
     credentials: true,
     maxAge: 86400,
@@ -130,12 +133,12 @@ export function createApp(deps: ApplicationDependencies) {
     if (largeBody) return next();
     return jsonBody(request, response, next);
   });
-  app.use('/api', rateLimit(240, 60_000));
-  app.use('/api/auth', rateLimit(60, 60_000), authRoutes(verify));
+  app.use('/api', rateLimit(120, 60_000));
+  app.use('/api/auth', rateLimit(10, 15 * 60_000), authRoutes(verify));
   app.use('/api/profiles', profileRoutes(verify, profiles, roles));
   app.use('/api/preferences', preferencesRoutes(verify, preferences));
   app.use('/api/statistics', statisticsRoutes(verify, statistics));
-  app.use('/api/guest', rateLimit(20, 60_000), guestRoutes(verify, guests, profiles));
+  app.use('/api/guest', rateLimit(5, 60 * 60_000), guestRoutes(verify, guests, profiles));
   app.use('/api/admin', rateLimit(60, 60_000), adminRoutes(verify, roles, reports, adminUsers));
   app.use('/api/admin/overview', overviewRoutes(verify, roles, { database: deps.database, game, matchHistory }));
   app.use('/api/admin/analytics', analyticsRoutes(verify, roles, analytics));

@@ -63,3 +63,47 @@ Manual steps (user action, not code):
 
 Ambiguity choice (simplest option): no `report-uri` endpoint is configured (would require a new
 service); Report-Only violations surface in the browser console instead.
+
+## T9 — API abuse protection
+
+Rate limits (per IP, in-memory sliding/fixed windows, `server/src/middleware/rateLimit.ts`):
+
+| Surface | Limit |
+| --- | --- |
+| `POST /api/guest/*` (guest sessions) | 5 / hour |
+| `/api/auth/*` | 10 / 15 min |
+| `/api/*` (whole API) | 120 / min |
+| Socket connections | 30 / min per IP |
+| Socket events per socket | 120 / min (600 / min for `game:stroke`, which fires once per finished stroke) |
+
+Every API response now carries `RateLimit-Limit`, `RateLimit-Remaining`, `RateLimit-Reset`;
+429 responses also carry `Retry-After` (seconds). Socket floods are disconnected
+(`socket.disconnect(true)`), and reconnect storms then hit the per-IP connection limit.
+Guess/chat/join floods were already limited per user by game settings and remain so.
+
+Helmet 8 replaces the hand-rolled header middleware on the API with the same values
+(nosniff, `X-Frame-Options: DENY`, `Referrer-Policy: strict-origin-when-cross-origin`,
+`Cross-Origin-Resource-Policy: same-site`) plus its extra defaults. CSP and HSTS stay off in
+Helmet because they are managed at the Cloudflare edge (T8).
+
+Usernames are now 3–20 characters everywhere they are accepted or parsed: guest session creation,
+profile patch, public match-history lookup, and client-side guards in `signUp` / `continueAsGuest`
+before any Appwrite session is created. Guest input `maxLength` raised 16 → 20 to match.
+
+IDOR audit of `/api/profiles`, `/api/matches`, `/api/statistics`: **no issues found**.
+All mutations and personal reads are scoped to the verified JWT identity (`/me` routes);
+`PATCH /api/profiles/me` rejects unknown fields such as `userId` (strict schema, covered by e2e);
+public reads (`/api/profiles/username/:username`, `/api/matches/player/:username`,
+`/api/matches/:matchId`) return only public projections (no userId, email, or internal fields);
+`/api/matches/admin` requires the `matches.inspect` permission.
+
+Skipped (per spec "profanity if exists"): no profanity filter exists anywhere in the codebase,
+so none was applied. Adding a word list would be a new product decision.
+
+Tests: e2e now asserts all three HTTP limits (5/h guest, 10/15min auth, 120/min API) including
+`RateLimit-*` and `Retry-After` headers, the socket event-flood disconnect, and the per-IP
+connection limit; new unit tests cover the sliding window. 130 pass / 0 fail / 4 skipped.
+Live verification: guest sign-in + room creation still pass under the new limits.
+
+Note for local development: the guest limit is per IP, so repeated manual guest sign-ins from
+one machine can exhaust 5/hour; restart the dev server to reset the in-memory windows.

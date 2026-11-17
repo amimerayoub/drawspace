@@ -13,6 +13,7 @@ import type { GameSettingsRepository } from '../repositories/gameSettingsReposit
 import type { RoomStateStore } from '../state/roomStateStore';
 import { MatchPersistenceService } from '../services/matchPersistenceService';
 import { AppwriteMatchHistoryRepository } from '../repositories/matchHistoryRepository';
+import { slidingWindow } from './rateLimits';
 
 interface SocketDependencies {
   verify: JwtVerifier;
@@ -66,8 +67,10 @@ export async function createSocketHandlers(io: Server, deps: SocketDependencies)
     return settingsCache.value;
   }
   const recoveredRooms = await deps.game.recover();
+  const connectionsByIp = slidingWindow(30, 60_000);
 
   io.use(async (socket, next) => {
+    if (!connectionsByIp.allow(socket.handshake.address || 'unknown')) { next(new Error('Too many connections from this address')); return; }
     const jwt = socket.handshake.auth?.jwt;
     if (typeof jwt !== 'string' || !jwt) { next(new Error('Authentication required')); return; }
     try {
@@ -83,6 +86,17 @@ export async function createSocketHandlers(io: Server, deps: SocketDependencies)
     const player = socket.data.player as PlayerIdentity;
     const identity = socket.data.identity as AuthenticatedIdentity;
     let activeRoomCode: string | null = null;
+    const eventRates = slidingWindow(120, 60_000);
+    const strokeRates = slidingWindow(600, 60_000);
+    socket.use((packet, next) => {
+      const limiter = packet[0] === 'game:stroke' ? strokeRates : eventRates;
+      if (!limiter.allow(socket.id)) {
+        socket.disconnect(true);
+        next(new Error('RATE_LIMITED'));
+        return;
+      }
+      next();
+    });
     const presenceHeartbeat = setInterval(() => { if (activeRoomCode) void deps.stateStore.touchPresence(activeRoomCode, identity.userId, 45, socket.id).catch(() => undefined); }, 15_000);
     presenceHeartbeat.unref();
 

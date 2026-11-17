@@ -6,7 +6,7 @@ import type { GuestRepository } from '../repositories/guestRepository';
 import type { ProfileRepository } from '../repositories/profileRepository';
 import { HttpError } from '../middleware/errors';
 
-const createSchema = z.object({ username: z.string().trim().min(3).max(32), avatarId: z.string().trim().min(1).max(32) }).strict();
+const createSchema = z.object({ username: z.string().trim().min(3).max(20), avatarId: z.string().trim().min(1).max(32) }).strict();
 
 export function guestRoutes(verify: JwtVerifier, guests: GuestRepository, profiles: ProfileRepository): Router {
   const router = Router();
