@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import { Query, type AppwriteDatabase } from '../database/appwrite';
+import { assetPath } from '../lib/assetPath';
 import { RowRepository, type Row } from './rowRepository';
 import { StatisticsRepository } from './statisticsRepository';
 import { XpConfigRepository } from './xpConfigRepository';
@@ -43,13 +44,13 @@ export class ProgressionRepository {
     const achievementRows = achievements.map((row) => {
       const condition = String(row.conditionType || '').toLowerCase();
       const current = condition.includes('win') ? stats.gamesWon : condition.includes('guess') ? stats.correctGuesses : condition.includes('game') || condition.includes('match') ? stats.totalGames : condition.includes('point') || condition.includes('score') ? stats.totalPoints : 0;
-      return { id: String(row.achievementId), name: String(row.name), description: String(row.description || ''), icon: String(row.iconAsset || ''), xpReward: Number(row.rewardXP) || 0, condition, active: true, goal: Number(row.conditionValue) || 1, progress: Math.min(current, Number(row.conditionValue) || 1), unlockedAt: unlockedAchievements.find((item) => item.achievementId === row.achievementId)?.unlockedAt as string | undefined };
+      return { id: String(row.achievementId), name: String(row.name), description: String(row.description || ''), icon: assetPath(row.iconAsset), xpReward: Number(row.rewardXP) || 0, condition, active: true, goal: Number(row.conditionValue) || 1, progress: Math.min(current, Number(row.conditionValue) || 1), unlockedAt: unlockedAchievements.find((item) => item.achievementId === row.achievementId)?.unlockedAt as string | undefined };
     });
     return {
       progression: { totalXP, highestLevel: Number(progression?.highestLevel) || level.level, equippedTitleId: String(progression?.equippedTitleId || '') || null, ...level, level: Number(progression?.currentLevel) || level.level },
       statistics: stats,
       achievements: achievementRows,
-      titles: titles.map((row) => ({ id: String(row.titleId), name: String(row.name), description: String(row.description || ''), image: String(row.iconAsset || ''), xpReward: 0, condition: String(row.unlockCondition || ''), active: true, unlocked: unlockedTitleIds.has(String(row.titleId)) })),
+      titles: titles.map((row) => ({ id: String(row.titleId), name: String(row.name), description: String(row.description || ''), image: assetPath(row.iconAsset), xpReward: 0, condition: String(row.unlockCondition || ''), active: true, unlocked: unlockedTitleIds.has(String(row.titleId)) })),
       challenges: challenges.map((row) => {
         const periodKey = this.periodKey(String(row.period), new Date());
         const state = userChallenges.find((item) => item.challengeId === row.challengeId && item.periodKey === periodKey);
@@ -74,13 +75,13 @@ export class ProgressionRepository {
       const profile = profileById.get(userId);
       const titleId = String(row.equippedTitleId || '') || null;
       const title = titleId ? titlesById.get(titleId) : undefined;
-      return { rank: 0, userId, username: String(profile?.username || profile?.displayName || 'Player'), avatarId: String(profile?.avatarId || 'av-01'), level: Number(row.currentLevel) || 1, xp: Number(row.totalXP) || 0, wins: Number(statsById.get(userId)?.gamesWon) || 0, titleId, titleName: title ? String(title.name) : null, titleDescription: title ? String(title.description || '') : null, titleImage: title ? String(title.iconAsset || '') : null };
+      return { rank: 0, userId, username: String(profile?.username || profile?.displayName || 'Player'), avatarId: String(profile?.avatarId || 'av-01'), level: Number(row.currentLevel) || 1, xp: Number(row.totalXP) || 0, wins: Number(statsById.get(userId)?.gamesWon) || 0, titleId, titleName: title ? String(title.name) : null, titleDescription: title ? String(title.description || '') : null, titleImage: title ? assetPath(title.iconAsset) : null };
     }).sort((a, b) => b.xp - a.xp || b.wins - a.wins).slice(0, 100).map((entry, index) => ({ ...entry, rank: index + 1 }));
   }
 
   async publicAchievements() {
     const rows = await this.list('achievements', [Query.equal('isActive', true), Query.limit(200)]);
-    return rows.map((row) => ({ id: String(row.achievementId), name: String(row.name), description: String(row.description || ''), icon: String(row.iconAsset || ''), xpReward: Number(row.rewardXP) || 0, condition: String(row.conditionType || ''), active: true, goal: Number(row.conditionValue) || 1 }));
+    return rows.map((row) => ({ id: String(row.achievementId), name: String(row.name), description: String(row.description || ''), icon: assetPath(row.iconAsset), xpReward: Number(row.rewardXP) || 0, condition: String(row.conditionType || ''), active: true, goal: Number(row.conditionValue) || 1 }));
   }
 
   async equipTitle(userId: string, titleId: string | null) {

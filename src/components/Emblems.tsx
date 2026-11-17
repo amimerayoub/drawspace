@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import {
   BookOpen, CalendarDays, Eye, Medal, Palette, PenTool, Sparkles, Target, TrendingUp, Trophy, Users, Zap, type LucideIcon,
 } from 'lucide-react';
@@ -17,6 +18,7 @@ export function AchievementIcon({ achievement, size = 40, unlocked = true, class
   achievement: Achievement; size?: number; unlocked?: boolean; className?: string;
 }) {
   const src = achievement.image ?? achievementImage(achievement.id);
+  const [failedSrc, setFailedSrc] = useState<string | null>(null);
   const Icon = FALLBACK[achievement.icon] ?? Sparkles;
   return (
     <span
@@ -25,8 +27,8 @@ export function AchievementIcon({ achievement, size = 40, unlocked = true, class
       role="img"
       aria-label={achievement.name}
     >
-      {src
-        ? <ResponsiveImage src={src} alt="" width={size} height={size} />
+      {src && failedSrc !== src
+        ? <ResponsiveImage src={src} alt="" width={size} height={size} onError={() => setFailedSrc(src)} />
         : <Icon size={Math.round(size * 0.5)} aria-hidden />}
     </span>
   );
@@ -36,7 +38,8 @@ export function AchievementIcon({ achievement, size = 40, unlocked = true, class
    carries an empty alt. Titles without a generated symbol render nothing. */
 export function TitleIcon({ title, size = 18, className = '' }: { title: Title; size?: number; className?: string }) {
   const src = title.image ?? titleImage(title.id);
-  if (!src) return null;
+  const [failedSrc, setFailedSrc] = useState<string | null>(null);
+  if (!src || failedSrc === src) return null;
   return (
     <ResponsiveImage
       className={`emblem title-emblem ${className}`}
@@ -45,6 +48,7 @@ export function TitleIcon({ title, size = 18, className = '' }: { title: Title; 
       aria-hidden
       width={size}
       height={size}
+      onError={() => setFailedSrc(src)}
     />
   );
 }

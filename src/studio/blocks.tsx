@@ -7,7 +7,7 @@ import {
 } from 'lucide-react';
 import { sanitizeHtml, isSafeUrl } from './sanitize';
 import { escapeHtml, type Block, type DesignConfig, type StudioDoc } from './types';
-import { ResponsiveImage } from '@/components/ResponsiveImage';
+import { ResponsiveImage, resolveLegacyAsset } from '@/components/ResponsiveImage';
 
 export interface RelatedItem { slug: string; title: string; publishedAt?: string }
 export interface RenderContext {
@@ -253,7 +253,7 @@ function renderBlock(block: Block, ctx: RenderContext, doc: StudioDoc, depth = 0
           className={`st-hero ${block.align === 'center' ? 'st-hero-center' : ''}`}
           style={{
             background: block.bg || undefined,
-            backgroundImage: block.image && isSafeUrl(block.image, true) ? `linear-gradient(180deg, rgba(0,0,0,0.35), rgba(0,0,0,0.6)), url("${block.image.replace(/["')]/g, '')}")` : undefined,
+            backgroundImage: block.image && isSafeUrl(block.image, true) ? `linear-gradient(180deg, rgba(0,0,0,0.35), rgba(0,0,0,0.6)), url("${resolveLegacyAsset(block.image).replace(/["')]/g, '')}")` : undefined,
           }}
         >
           {block.eyebrow && <span className="st-hero-eyebrow">{block.eyebrow}</span>}

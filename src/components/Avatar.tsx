@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { db } from '@/services';
 import type { AvatarDef } from '@/types';
 import { avatarImage } from '@/data/assets';
@@ -32,6 +33,7 @@ export function Shape({ shape }: { shape: number }) {
 export function Avatar({ avatarId, size = 40, className = '' }: { avatarId: string; size?: number; className?: string }) {
   const def = db.avatars.find((a) => a.id === avatarId);
   const src = def?.image ?? avatarImage(avatarId);
+  const [failedSrc, setFailedSrc] = useState<string | null>(null);
   return (
     <span
       className={`avatar ${className}`}
@@ -39,8 +41,8 @@ export function Avatar({ avatarId, size = 40, className = '' }: { avatarId: stri
       role="img"
       aria-label={def ? `${def.name} avatar` : 'Player avatar'}
     >
-      {src ? (
-        <ResponsiveImage className="avatar-img" src={src} alt="" width={size} height={size} />
+      {src && failedSrc !== src ? (
+        <ResponsiveImage className="avatar-img" src={src} alt="" width={size} height={size} onError={() => setFailedSrc(src)} />
       ) : (
         <svg viewBox="0 0 48 48" width={size} height={size} aria-hidden>
           <Shape shape={def?.shape ?? 0} />

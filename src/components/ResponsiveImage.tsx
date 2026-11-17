@@ -11,7 +11,19 @@ type Props = Omit<ImgHTMLAttributes<HTMLImageElement>, 'srcSet' | 'loading' | 'f
 /* Serves the smallest suitable variant: static assets use the generated
    <name>-<width>.webp files, Appwrite media uses ?w= / ?variant=thumb.
    External or unknown URLs render unchanged. */
-export function ResponsiveImage({ src, eager = false, widths, thumb = false, sizes, width, height, ...rest }: Props) {
+
+/* Stored records may still reference pre-WebP .png/.jpg paths; resolve them
+   to the optimized asset when it exists. */
+const LEGACY_ASSET = /^(?:https?:\/\/[^/]+)?(\/assets\/[^?#]+)\.(?:png|jpe?g)$/i;
+export function resolveLegacyAsset(src: string): string {
+  const match = src.match(LEGACY_ASSET);
+  if (!match) return src;
+  const webp = `${match[1]}.webp`;
+  return ASSET_VARIANTS[webp] ? webp : src;
+}
+
+export function ResponsiveImage({ src: rawSrc, eager = false, widths, thumb = false, sizes, width, height, ...rest }: Props) {
+  const src = resolveLegacyAsset(rawSrc);
   const variant = ASSET_VARIANTS[src];
   const isMedia = src.includes('/api/media/');
   let resolved = src;
