@@ -20,14 +20,16 @@ const client = new Client().setEndpoint(endpoint).setProject(projectId).setKey(a
 const tables = new TablesDB(client);
 
 const waitForAvailable = async (read, label) => {
-  const deadline = Date.now() + 60_000;
+  const deadline = Date.now() + 180_000;
+  let lastStatus = 'unknown';
   while (Date.now() < deadline) {
     const resource = await read();
+    lastStatus = resource.status;
     if (resource.status === 'available') return;
     if (['failed', 'stuck', 'deleting'].includes(resource.status)) throw new Error(`${label} entered ${resource.status}; migration stopped safely.`);
     await new Promise((resolve) => setTimeout(resolve, 500));
   }
-  throw new Error(`${label} did not become available within 60 seconds; migration stopped safely.`);
+  throw new Error(`${label} did not become available within 180 seconds (last status: ${lastStatus}); migration stopped safely.`);
 };
 
 const getTable = async (id) => { try { return await tables.getTable(databaseId, id); } catch (error) { if (error?.code === 404) return null; throw error; } };
@@ -55,9 +57,9 @@ const mcpKeysTable = {
 };
 
 const createColumn = async (tableId, [key, type, size, required, def, array]) => {
-  if (type === 'string') await tables.createStringColumn(databaseId, tableId, key, size, required, def ?? '', Boolean(array));
+  if (type === 'string') await tables.createStringColumn(databaseId, tableId, key, size, required, required ? undefined : (Array.isArray(def) ? null : (def ?? '')), Boolean(array));
   else if (type === 'integer') await tables.createIntegerColumn(databaseId, tableId, key, required, def ?? 0, size /* max */);
-  else await tables.createBooleanColumn(databaseId, tableId, key, required, def ?? false);
+  else await tables.createBooleanColumn(databaseId, tableId, key, required, required ? undefined : (def ?? false));
   await waitForAvailable(() => tables.getColumn(databaseId, tableId, key), `Column ${tableId}.${key}`);
 };
 
@@ -89,8 +91,14 @@ const collisions = [...normalizedMap.entries()].filter(([, count]) => count > 1)
 const hasNormalizedIndex = wordIdx.some((i) => i.key === 'idx_normalizedWord');
 if (needsBackfill.length) plan.push(`custom_words: backfill normalizedWord on ${needsBackfill.length} row(s).`);
 if (!hasNormalizedIndex) plan.push(collisions.length ? `custom_words: SKIP unique idx_normalizedWord (case-insensitive duplicates exist: ${collisions.slice(0, 10).join(', ')}${collisions.length > 10 ? ', …' : ''}). Resolve manually first.` : 'custom_words: add unique index idx_normalizedWord.');
-if (!wordCategories) plan.push('Create row-secured table word_categories (no client permissions) + idx_slug.');
-if (!mcpKeys) plan.push('Create row-secured table mcp_api_keys (no client permissions) + idx_keyHash, idx_status.');
+for (const spec of [wordCategoriesTable, mcpKeysTable]) {
+  const existing = spec.id === 'word_categories' ? wordCategories : mcpKeys;
+  if (!existing) { plan.push(`Create row-secured table ${spec.id} (no client permissions) + ${spec.indexes.map((i) => i.key).join(', ')}.`); continue; }
+  const cols = await columnsOf(spec.id);
+  const idxs = await indexesOf(spec.id);
+  for (const [key] of spec.columns) if (!cols.some((c) => c.key === key)) plan.push(`${spec.id}: add missing column ${key}.`);
+  for (const index of spec.indexes) if (!idxs.some((i) => i.key === index.key)) plan.push(`${spec.id}: add missing index ${index.key}.`);
+}
 
 console.log(`Appwrite content migration target: ${env} / ${projectId} / ${databaseId}`);
 console.log(`Live rows: custom_words=${allWords.length}, normalizedWord backfill needed=${needsBackfill.length}, case-insensitive collisions=${collisions.length}.`);
@@ -122,15 +130,19 @@ try {
   }
 
   for (const spec of [wordCategoriesTable, mcpKeysTable]) {
-    if (await getTable(spec.id)) continue;
-    await tables.createTable(databaseId, spec.id, spec.name, [], true);
-    await waitForAvailable(() => tables.getTable(databaseId, spec.id), `Table ${spec.id}`);
-    for (const column of spec.columns) await createColumn(spec.id, column);
+    if (!(await getTable(spec.id))) {
+      await tables.createTable(databaseId, spec.id, spec.name, [], true);
+      await waitForAvailable(() => tables.getTable(databaseId, spec.id), `Table ${spec.id}`);
+      console.log(`Created table ${spec.id}.`);
+    }
+    const cols = await columnsOf(spec.id);
+    for (const column of spec.columns) if (!cols.some((c) => c.key === column[0])) await createColumn(spec.id, column);
+    const idxs = await indexesOf(spec.id);
     for (const index of spec.indexes) {
+      if (idxs.some((i) => i.key === index.key)) continue;
       await tables.createIndex(databaseId, spec.id, index.key, index.type, index.columns, index.orders);
       await waitForAvailable(() => tables.getIndex(databaseId, spec.id, index.key), `Index ${spec.id}.${index.key}`);
     }
-    console.log(`Created table ${spec.id}.`);
   }
   console.log('Content-system migration applied. Re-run dry-run to confirm completeness.');
 } catch (error) {
