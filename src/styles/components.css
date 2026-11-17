@@ -492,7 +492,7 @@ img.emblem, .title-emblem { object-fit: contain; display: inline-block; vertical
 .logo { display: inline-flex; align-items: center; gap: 9px; }
 .logo-mark { display: block; object-fit: contain; flex: none; }
 .logo-sep { width: 1px; height: 20px; background: var(--border-strong); flex: none; }
-.logo-word { font-family: var(--font-display); font-weight: 800; font-size: 17px; letter-spacing: -0.01em; color: var(--text); white-space: nowrap; }
+.logo-word { font-family: var(--font-brush); font-weight: 400; font-size: 22px; letter-spacing: 0.01em; color: var(--text); white-space: nowrap; }
 .header-nav { display: flex; align-items: stretch; align-self: stretch; gap: 2px; margin-inline-start: auto; }
 .header-link {
   position: relative;
@@ -686,7 +686,7 @@ img.emblem, .title-emblem { object-fit: contain; display: inline-block; vertical
 .section { padding: var(--space-8) 0; }
 .section + .section { border-top: 1px solid var(--border); }
 .section-head { margin-bottom: var(--space-6); max-width: 620px; }
-.section-title { font-size: var(--text-xl); margin-bottom: 8px; }
+.section-title { font-family: var(--font-brush); font-weight: 400; font-size: 30px; letter-spacing: 0; margin-bottom: 8px; }
 .section-sub { color: var(--text-secondary); }
 
 .panel { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); }

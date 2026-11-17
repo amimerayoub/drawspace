@@ -2,7 +2,7 @@
 
 .hero { padding: var(--space-8) 0 var(--space-7); }
 .hero-copy { max-width: 680px; margin: 0 auto; text-align: center; display: flex; flex-direction: column; align-items: center; gap: 20px; }
-.hero-title { font-size: var(--text-hero); font-weight: 800; letter-spacing: -0.025em; }
+.hero-title { font-family: var(--font-brush); font-size: clamp(42px, 6vw, 66px); font-weight: 400; letter-spacing: 0; line-height: 1.08; }
 .hero-sub { font-size: var(--text-lg); color: var(--text-secondary); max-width: 540px; line-height: 1.55; }
 .hero-ctas { display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; margin-top: 4px; }
 .hero-players { font-size: var(--text-sm); margin-top: 4px; }

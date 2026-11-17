@@ -182,7 +182,7 @@
   cursor: pointer; transition: border-color var(--dur) var(--ease), background var(--dur) var(--ease);
 }
 .word-choice-card:hover, .word-choice-card:focus-visible { border-color: var(--accent); background: var(--accent-soft); }
-.word-choice-word { font-family: var(--font-display); font-weight: 700; font-size: var(--text-md); color: var(--text); }
+.word-choice-word { font-family: var(--font-brush); font-weight: 400; font-size: 21px; color: var(--text); }
 .word-choice-meta { font-size: var(--text-xs); text-align: center; }
 .word-choice-foot { display: flex; align-items: center; justify-content: space-between; margin-top: var(--space-4); }
 .word-waiting {
@@ -192,7 +192,7 @@
 
 .reveal-card { padding: var(--space-5) var(--space-6); text-align: center; max-width: 420px; }
 .reveal-label { font-size: var(--text-xs); margin-bottom: var(--space-1); }
-.reveal-word { font-family: var(--font-display); font-size: var(--text-2xl); font-weight: 800; color: var(--accent-text); }
+.reveal-word { font-family: var(--font-brush); font-size: 40px; font-weight: 400; color: var(--accent-text); }
 .reveal-def { font-size: var(--text-sm); margin-top: var(--space-2); }
 .reveal-next { font-size: var(--text-xs); margin-top: var(--space-3); }
 

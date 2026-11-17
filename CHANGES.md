@@ -107,3 +107,23 @@ Live verification: guest sign-in + room creation still pass under the new limits
 
 Note for local development: the guest limit is per IP, so repeated manual guest sign-ins from
 one machine can exhaust 5/hour; restart the dev server to reset the in-memory windows.
+## Brush-style display writing ("style ecrit like pincel")
+
+Interpretation: handwritten brush lettering for the brand and display moments, not body text.
+Chosen face: **Caveat Brush** (Google Fonts, OFL), a marker/brush script that matches the
+draw-and-guess subject. Self-hosted like the T8 fonts: `public/fonts/caveat-brush-latin.woff2`
+(67 KB, latin subset, `font-display: swap`, immutable cache via the existing `/fonts/*` rule,
+preloaded in `index.html` because the logo and hero use it above the fold).
+
+Applied through a new `--font-brush` token to: the `DrawSpace` logo wordmark (header + footer),
+the landing hero title, landing/section titles, the in-game word-choice options and the
+round-reveal word. Sizes were raised where the brush face replaced Manrope (logo 17 → 22px,
+hero clamp 34–52 → 42–66px, reveal 30 → 40px) because script faces read smaller at equal em;
+weight is 400 (the face ships one weight, no faux bold). UI headings, forms, tables, blog
+article titles and admin surfaces keep Manrope/Inter for readability.
+
+Verified in headless Chrome: `document.fonts.check('16px "Caveat Brush"')` true, computed
+family on logo/hero/section titles is the brush stack, only the three self-hosted woff2 files
+are requested (zero Google Fonts traffic), no horizontal overflow at 390px, guest flow into
+the lobby still passes, zero console errors. Screenshots: desktop + mobile landing, lobby.
+Typecheck, 130 tests, and production build all pass.

@@ -2,6 +2,7 @@
 :root {
   --font-body: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
   --font-display: 'Manrope', 'Inter', system-ui, sans-serif;
+  --font-brush: 'Caveat Brush', 'Manrope', cursive;
   --font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', 'Cascadia Code', Consolas, monospace;
 
   --accent: #06b6d4;
