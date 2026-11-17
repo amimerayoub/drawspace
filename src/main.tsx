@@ -8,6 +8,7 @@ import { ThemeProvider } from '@/theme/ThemeContext';
 import { ToastProvider } from '@/context/ToastContext';
 import { AuthProvider } from '@/context/AuthContext';
 import { PlatformConfigProvider } from '@/context/PlatformConfigContext';
+import '@/styles/fonts.css';
 import '@/styles/tokens.css';
 import '@/styles/base.css';
 import '@/styles/components.css';
