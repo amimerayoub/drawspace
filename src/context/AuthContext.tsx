@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
 import type { User } from '@/types';
 import { authService } from '@/services';
+import { AUTH_EXPIRED_EVENT } from '@/lib/jwtCache';
 
 export interface SessionUser {
   id: string;
@@ -37,6 +38,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (active) { setUser(null); setReady(true); }
     });
     return () => { active = false; };
+  }, []);
+
+  useEffect(() => {
+    const onExpired = () => { void authService.signOut().finally(() => setUser(null)); };
+    window.addEventListener(AUTH_EXPIRED_EVENT, onExpired);
+    return () => window.removeEventListener(AUTH_EXPIRED_EVENT, onExpired);
   }, []);
 
   const signIn = async (identifier: string, password: string) => {

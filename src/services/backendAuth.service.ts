@@ -1,6 +1,7 @@
 import { ID } from 'appwrite';
 import type { User } from '@/types';
 import { appwriteAccount } from '@/lib/appwrite';
+import { getJwt, invalidateJwt } from '@/lib/jwtCache';
 import { apiGet, apiPost, apiPatch } from './apiClient';
 import { backendProgressionService } from './backendProgression.service';
 
@@ -10,6 +11,7 @@ interface AdminDto { role: 'superadmin' | 'admin' | 'moderator' | 'content_manag
 
 // Appwrite rejects a new session while one is active (e.g. a lingering guest session), so clear it first.
 async function clearActiveSession(): Promise<void> {
+  invalidateJwt();
   await appwriteAccount.deleteSession('current').catch(() => undefined);
 }
 
@@ -80,6 +82,7 @@ export const backendAuthService = {
   },
 
   async signOut(): Promise<void> {
+    invalidateJwt();
     await appwriteAccount.deleteSession('current').catch(() => undefined);
   },
 
@@ -92,7 +95,6 @@ export const backendAuthService = {
   },
 
   async getAuthJWT(): Promise<string | null> {
-    try { return (await appwriteAccount.createJWT()).jwt; }
-    catch { return null; }
+    return getJwt();
   },
 };

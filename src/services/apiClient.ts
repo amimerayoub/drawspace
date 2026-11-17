@@ -1,4 +1,4 @@
-import { appwriteAccount } from '@/lib/appwrite';
+import { getJwt, notifyAuthExpired } from '@/lib/jwtCache';
 
 export const baseUrl = (import.meta.env.VITE_GAME_SERVER_URL || 'http://localhost:3001').replace(/\/+$/, '');
 
@@ -14,27 +14,35 @@ export interface RequestOptions extends RequestInit {
   raw?: boolean;
 }
 
+interface Payload<T> { data?: T; error?: string; code?: string }
+
 export async function apiRequest<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const { auth = 'required', timeoutMs = 12_000, raw = false, signal, ...init } = options;
-  let jwt: string | null = null;
-  if (auth !== 'none') {
-    try { jwt = (await appwriteAccount.createJWT()).jwt; }
-    catch {
-      if (auth === 'required') throw new ApiError('Please sign in to continue.', 401, 'AUTH_REQUIRED');
-    }
-  }
+  const jwt = auth !== 'none' ? await getJwt() : null;
+  if (auth === 'required' && !jwt) throw new ApiError('Please sign in to continue.', 401, 'AUTH_REQUIRED');
 
   const controller = new AbortController();
   const abort = () => controller.abort(signal?.reason);
   if (signal?.aborted) abort(); else signal?.addEventListener('abort', abort, { once: true });
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
-  const headers = new Headers(init.headers);
-  headers.set('Accept', 'application/json');
-  if (init.body && !(init.body instanceof FormData) && !headers.has('Content-Type')) headers.set('Content-Type', 'application/json');
-  if (jwt) headers.set('Authorization', `Bearer ${jwt}`);
+  const url = `${baseUrl}${path.startsWith('/') ? path : `/${path}`}`;
+  const attempt = async (token: string | null) => {
+    const headers = new Headers(init.headers);
+    headers.set('Accept', 'application/json');
+    if (init.body && !(init.body instanceof FormData) && !headers.has('Content-Type')) headers.set('Content-Type', 'application/json');
+    if (token) headers.set('Authorization', `Bearer ${token}`);
+    const response = await fetch(url, { ...init, headers, signal: controller.signal });
+    const payload = await response.json().catch(() => null) as Payload<T> | null;
+    return { response, payload };
+  };
   try {
-    const response = await fetch(`${baseUrl}${path.startsWith('/') ? path : `/${path}`}`, { ...init, headers, signal: controller.signal });
-    const payload = await response.json().catch(() => null) as { data?: T; error?: string; code?: string } | null;
+    let { response, payload } = await attempt(jwt);
+    // One forced refresh + one retry on an invalid session; never loop.
+    if (response.status === 401 && auth !== 'none' && payload?.code === 'AUTH_INVALID') {
+      const fresh = await getJwt(true);
+      if (fresh && fresh !== jwt) ({ response, payload } = await attempt(fresh));
+      if (response.status === 401) notifyAuthExpired();
+    }
     if (!response.ok) throw new ApiError(payload?.error || 'The request could not be completed.', response.status, payload?.code);
     if (raw) return payload as T;
     return (payload && 'data' in payload ? payload.data : payload) as T;
@@ -56,11 +64,8 @@ export const apiDelete = <T>(path: string, body?: unknown, options?: RequestOpti
 
 export async function apiDownload(path: string, options: RequestOptions = {}): Promise<string> {
   const { auth = 'required', timeoutMs = 60_000, signal } = options;
-  let jwt: string | null = null;
-  if (auth !== 'none') {
-    try { jwt = (await appwriteAccount.createJWT()).jwt; }
-    catch { if (auth === 'required') throw new ApiError('Please sign in to continue.', 401, 'AUTH_REQUIRED'); }
-  }
+  const jwt = auth !== 'none' ? await getJwt() : null;
+  if (auth === 'required' && !jwt) throw new ApiError('Please sign in to continue.', 401, 'AUTH_REQUIRED');
   const controller = new AbortController();
   const abort = () => controller.abort(signal?.reason);
   if (signal?.aborted) abort(); else signal?.addEventListener('abort', abort, { once: true });
@@ -71,6 +76,7 @@ export async function apiDownload(path: string, options: RequestOptions = {}): P
     const response = await fetch(`${baseUrl}${path.startsWith('/') ? path : `/${path}`}`, { headers, signal: controller.signal });
     if (!response.ok) {
       const payload = await response.json().catch(() => null) as { error?: string; code?: string } | null;
+      if (response.status === 401 && payload?.code === 'AUTH_INVALID') notifyAuthExpired();
       throw new ApiError(payload?.error || 'The export could not be completed.', response.status, payload?.code);
     }
     const filename = /filename="([^"]+)"/.exec(response.headers.get('Content-Disposition') || '')?.[1] || 'drawspace-export';
