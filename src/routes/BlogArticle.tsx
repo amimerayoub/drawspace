@@ -1,8 +1,7 @@
-import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { ArrowLeft, Clock } from 'lucide-react';
 import { useI18n } from '@/i18n/I18nContext';
-import { contentService, type ContentBlog } from '@/services/content.service';
+import { usePublicBlog } from '@/hooks/useQueries';
 import { BlogCover } from '@/components/BlogCover';
 import { AdSlot } from '@/components/AdSlot';
 import { Badge, EmptyState, Spinner } from '@/components/ui';
@@ -14,17 +13,12 @@ import { CustomCodeSection } from '@/studio/StudioArticle';
 export default function BlogArticle() {
   const { t, path, formatDate } = useI18n();
   const { slug } = useParams();
-  const [article, setArticle] = useState<ContentBlog | undefined>();
-  const [related, setRelated] = useState<ContentBlog[]>([]);
-  const [loadError, setLoadError] = useState(false);
-  useEffect(() => {
-    if (!slug) return;
-    setArticle(undefined); setLoadError(false);
-    void contentService.publicBlog(slug).then((result) => { setArticle(result.data); setRelated(result.related); }).catch(() => setLoadError(true));
-  }, [slug]);
+  const { data, isLoading, isError } = usePublicBlog(slug);
+  const article = data?.data;
+  const related = data?.related ?? [];
 
-  if (!loadError && !article) return <div className="page container container-narrow"><Spinner label="Loading article…" /></div>;
-  if (loadError || !article) {
+  if (!isError && (isLoading || !article)) return <div className="page container container-narrow"><Spinner label="Loading article…" /></div>;
+  if (isError || !article) {
     return (
       <div className="page container container-narrow">
         <EmptyState title={t('notFound.title')} action={<Link to={path('/blog')} className="btn btn-primary btn-sm">{t('blog.back')}</Link>} />

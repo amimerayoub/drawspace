@@ -1,8 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Crown } from 'lucide-react';
 import { useI18n } from '@/i18n/I18nContext';
 import { useAuth } from '@/context/AuthContext';
-import { backendProgressionService, type LiveLeaderboardEntry } from '@/services/backendProgression.service';
+import { useLeaderboard } from '@/hooks/useQueries';
 import { Avatar } from '@/components/Avatar';
 import { TitleIcon } from '@/components/Emblems';
 import { Badge, EmptyState, SearchInput } from '@/components/ui';
@@ -12,9 +12,9 @@ export default function Leaderboard() {
   const { t, formatNumber } = useI18n();
   const { user } = useAuth();
   const [query, setQuery] = useState('');
-  const [entries, setEntries] = useState<LiveLeaderboardEntry[]>([]);
-  const [error, setError] = useState('');
-  useEffect(() => { void backendProgressionService.leaderboard().then(setEntries).catch((e: unknown) => setError(e instanceof Error ? e.message : 'Leaderboard could not be loaded.')); }, []);
+  const { data, error: loadError } = useLeaderboard();
+  const entries = data ?? [];
+  const error = loadError instanceof Error ? loadError.message : loadError ? 'Leaderboard could not be loaded.' : '';
 
   const filtered = query
     ? entries.filter((e) => e.username.toLowerCase().includes(query.toLowerCase()))

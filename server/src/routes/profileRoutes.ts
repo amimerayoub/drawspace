@@ -3,6 +3,7 @@ import { z } from 'zod';
 import type { JwtVerifier } from '../auth/verifyJwt';
 import { identityFrom, requireAuth } from '../auth/middleware';
 import type { ProfileRepository } from '../repositories/profileRepository';
+import type { AdminRoleRepository } from '../repositories/adminRoleRepository';
 import { HttpError } from '../middleware/errors';
 
 const profilePatch = z.object({
@@ -12,7 +13,7 @@ const profilePatch = z.object({
   avatarId: z.string().trim().min(1).max(32).optional(),
 }).strict().refine((value) => Object.keys(value).length > 0, 'At least one field is required');
 
-export function profileRoutes(verify: JwtVerifier, profiles: ProfileRepository): Router {
+export function profileRoutes(verify: JwtVerifier, profiles: ProfileRepository, roles: AdminRoleRepository): Router {
   const router = Router();
   router.get('/username/:username', async (request, response, next) => {
     try {
@@ -25,7 +26,8 @@ export function profileRoutes(verify: JwtVerifier, profiles: ProfileRepository):
     try {
       const identity = identityFrom(request);
       const profile = await profiles.ensure({ userId: identity.userId, username: identity.name, avatarId: 'av-01', accountType: identity.isGuest ? 'guest' : 'registered' });
-      response.json({ data: profile });
+      const adminRole = await roles.getRole(identity.userId).catch(() => null);
+      response.json({ data: { ...profile, adminRole } });
     } catch (error) { next(error); }
   });
   router.patch('/me', requireAuth(verify), async (request, response, next) => {

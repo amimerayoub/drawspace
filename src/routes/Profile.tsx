@@ -7,7 +7,7 @@ import { useToast } from '@/context/ToastContext';
 import { useTheme } from '@/theme/ThemeContext';
 import { useSoundToggle } from '@/hooks/useSound';
 import { authService } from '@/services';
-import { backendProgressionService, type ProgressionSnapshot } from '@/services/backendProgression.service';
+import { useProgression } from '@/hooks/useQueries';
 import { matchHistoryService, type MatchHistoryItem, type MatchDetail } from '@/services/matchHistory.service';
 import { LOCALES } from '@/i18n/I18nContext';
 import { Avatar, AvatarPicker } from '@/components/Avatar';
@@ -23,14 +23,13 @@ export default function Profile() {
   const { theme, setTheme } = useTheme();
   const [soundOn, setSoundOn] = useSoundToggle();
   const [tab, setTab] = useState('overview');
-  const [progression, setProgression] = useState<ProgressionSnapshot | null>(null);
-  const [progressionError, setProgressionError] = useState('');
+  const { data: progression, error: progressionLoadError } = useProgression(user?.id);
+  const progressionError = progressionLoadError instanceof Error ? progressionLoadError.message : progressionLoadError ? 'Profile progression could not be loaded.' : '';
   const [matches, setMatches] = useState<MatchHistoryItem[]>([]);
   const [matchesLoading, setMatchesLoading] = useState(true);
   const [matchesError, setMatchesError] = useState('');
   const [selectedMatch, setSelectedMatch] = useState<MatchDetail | null>(null);
   const [matchDetailError, setMatchDetailError] = useState('');
-  useEffect(() => { if (user) void backendProgressionService.getMine().then(setProgression).catch((e: unknown) => setProgressionError(e instanceof Error ? e.message : 'Profile progression could not be loaded.')); }, [user?.id]);
   useEffect(() => { if (!user) return; setMatchesLoading(true); void matchHistoryService.mine().then(setMatches).catch((e: unknown) => setMatchesError(e instanceof Error ? e.message : 'Match history could not be loaded.')).finally(() => setMatchesLoading(false)); }, [user?.id]);
 
   const full = user ? fullUser(user.id) : undefined;

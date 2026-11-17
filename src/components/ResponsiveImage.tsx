@@ -44,7 +44,7 @@ export function ResponsiveImage({ src: rawSrc, eager = false, widths, thumb = fa
       width={w}
       height={h}
       loading={eager ? 'eager' : 'lazy'}
-      fetchPriority={eager ? 'high' : 'auto'}
+      {...(eager ? { fetchpriority: 'high' } : {})}
       decoding="async"
       {...rest}
     />

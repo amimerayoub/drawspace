@@ -1,8 +1,8 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowRight } from 'lucide-react';
 import { useI18n } from '@/i18n/I18nContext';
-import { contentService, type ContentBlog } from '@/services/content.service';
+import { usePublicBlogs } from '@/hooks/useQueries';
 import { BlogCover } from '@/components/BlogCover';
 import { AdSlot } from '@/components/AdSlot';
 import { Badge, EmptyState, SearchInput, Tabs } from '@/components/ui';
@@ -13,9 +13,9 @@ export default function Blog() {
   const [category, setCategory] = useState('all');
   const [tag, setTag] = useState('all');
   const [search, setSearch] = useState('');
-  const [articles, setArticles] = useState<ContentBlog[]>([]);
-  const [error, setError] = useState('');
-  useEffect(() => { void contentService.publicBlogs({ limit: 100 }).then((result) => setArticles(result.data)).catch((e: unknown) => setError(e instanceof Error ? e.message : 'Blog articles could not be loaded.')); }, []);
+  const { data, error: loadError } = usePublicBlogs({ limit: 100 });
+  const articles = data?.data ?? [];
+  const error = loadError instanceof Error ? loadError.message : loadError ? 'Blog articles could not be loaded.' : '';
 
   const categories = ['all', ...Array.from(new Set(articles.map((a) => a.category)))];
   const tags = ['all', ...Array.from(new Set(articles.flatMap((a) => a.tags)))];

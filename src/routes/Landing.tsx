@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowRight, ChevronDown, PenLine, MessageSquare, TrendingUp, KeyRound, Users, BookOpen, Target } from 'lucide-react';
 import { useI18n } from '@/i18n/I18nContext';
@@ -7,9 +7,7 @@ import { AdSlot } from '@/components/AdSlot';
 import { Avatar } from '@/components/Avatar';
 import { AchievementIcon } from '@/components/Emblems';
 import { Progress } from '@/components/ui';
-import { backendProgressionService, type LiveLeaderboardEntry } from '@/services/backendProgression.service';
-import { backendAdminService } from '@/services/backendAdmin.service';
-import type { Achievement, Article } from '@/types';
+import { useLeaderboard, usePublicAchievements, usePublicBlogs } from '@/hooks/useQueries';
 import type { DictKey } from '@/i18n/en';
 
 function GamePreview() {
@@ -98,15 +96,14 @@ function Faq() {
 
 export default function Landing() {
   const { t, path, formatDate } = useI18n();
-  const [leaders, setLeaders] = useState<LiveLeaderboardEntry[]>([]);
-  const [posts, setPosts] = useState<Article[]>([]);
-  const [achievements, setAchievements] = useState<Achievement[]>([]);
-  const [loadError, setLoadError] = useState('');
-  useEffect(() => {
-    void Promise.all([backendProgressionService.leaderboard(), backendAdminService.publicArticles(), backendProgressionService.publicAchievements()])
-      .then(([leaderboard, articles, catalog]) => { setLeaders(leaderboard.slice(0, 5)); setPosts(articles.slice(0, 3)); setAchievements(catalog.slice(0, 4)); })
-      .catch((e: unknown) => setLoadError(e instanceof Error ? e.message : 'Live content could not be loaded.'));
-  }, []);
+  const leaderboard = useLeaderboard();
+  const blogs = usePublicBlogs({ limit: 3 });
+  const catalog = usePublicAchievements();
+  const leaders = (leaderboard.data ?? []).slice(0, 5);
+  const posts = (blogs.data?.data ?? []).slice(0, 3);
+  const achievements = (catalog.data ?? []).slice(0, 4);
+  const loadError = leaderboard.error ?? blogs.error ?? catalog.error;
+  const loadErrorMessage = loadError instanceof Error ? loadError.message : loadError ? 'Live content could not be loaded.' : '';
 
   return (
     <>
@@ -200,7 +197,7 @@ export default function Landing() {
         </div>
       </section>
 
-      {loadError && <div className="container"><p role="status" className="faint">{loadError}</p></div>}
+      {loadErrorMessage && <div className="container"><p role="status" className="faint">{loadErrorMessage}</p></div>}
       <section className="section">
         <div className="container">
           <div className="section-head section-head-row">
@@ -255,7 +252,7 @@ export default function Landing() {
                 <Link key={p.id} to={path(`/blog/${p.slug}`)} className="post-row">
                   <div>
                     <p className="post-title">{p.title}</p>
-                    <p className="faint post-date">{formatDate(p.publishAt)}</p>
+                    <p className="faint post-date">{formatDate(p.publishedAt)}</p>
                   </div>
                   <ArrowRight size={15} className="mode-arrow" aria-hidden />
                 </Link>

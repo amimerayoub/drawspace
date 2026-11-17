@@ -44,13 +44,6 @@ export function contentRoutes(verify: JwtVerifier, roles: AdminRoleRepository, d
   return router;
 }
 
-export function publicBlogRoutes(data: AdminDataRepository): Router {
-  const router = Router();
-  router.get('/', async (_req, res, next) => { try { res.json({ data: await data.listPosts(false) }); } catch (e) { next(e); } });
-  router.get('/:slug', async (req, res, next) => { try { const posts = await data.listPosts(false); const slug = Array.isArray(req.params.slug) ? req.params.slug[0] : req.params.slug; const article = posts.find((post) => post.slug === slug); if (!article) throw new HttpError(404, 'Article not found', 'NOT_FOUND'); res.json({ data: article }); } catch (e) { next(e); } });
-  return router;
-}
-
 export function publicAdRoutes(data: AdminDataRepository): Router {
   const router = Router();
   router.get('/:placement', async (req, res, next) => {

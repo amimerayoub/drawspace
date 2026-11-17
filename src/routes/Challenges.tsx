@@ -1,11 +1,12 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Navigate } from 'react-router-dom';
 import { Check } from 'lucide-react';
 import type { ChallengePeriod } from '@/types';
 import { useI18n } from '@/i18n/I18nContext';
 import { useAuth } from '@/context/AuthContext';
 import { useToast } from '@/context/ToastContext';
-import { backendProgressionService, type ProgressionSnapshot } from '@/services/backendProgression.service';
+import { backendProgressionService } from '@/services/backendProgression.service';
+import { useInvalidateProgression, useProgression } from '@/hooks/useQueries';
 import { Emblem } from '@/components/Emblems';
 import { REWARD_IMAGES } from '@/data/assets';
 import { Badge, Button, EmptyState, Progress, Tabs } from '@/components/ui';
@@ -16,9 +17,9 @@ export default function Challenges() {
   const { user, refresh } = useAuth();
   const { toast } = useToast();
   const [tab, setTab] = useState<ChallengePeriod>('daily');
-  const [snapshot, setSnapshot] = useState<ProgressionSnapshot | null>(null);
-  const [error, setError] = useState('');
-  useEffect(() => { if (user) void backendProgressionService.getMine().then(setSnapshot).catch((e: unknown) => setError(e instanceof Error ? e.message : 'Challenges could not be loaded.')); }, [user?.id]);
+  const { data: snapshot, error: loadError } = useProgression(user?.id);
+  const invalidateProgression = useInvalidateProgression();
+  const error = loadError instanceof Error ? loadError.message : loadError ? 'Challenges could not be loaded.' : '';
 
   if (!user) return <Navigate to={path('/play')} replace />;
 
@@ -26,7 +27,7 @@ export default function Challenges() {
   const list = all.filter((c) => c.period === tab);
 
   const claim = async (id: string) => {
-    try { const { xp } = await backendProgressionService.claimChallenge(id); setSnapshot(await backendProgressionService.getMine()); await refresh(); toast(t('challenges.claimedToast', { xp }), 'success'); }
+    try { const { xp } = await backendProgressionService.claimChallenge(id); await invalidateProgression(); await refresh(); toast(t('challenges.claimedToast', { xp }), 'success'); }
     catch (e) { toast(e instanceof Error ? e.message : 'Challenge could not be claimed.', 'error'); }
   };
 

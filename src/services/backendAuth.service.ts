@@ -5,9 +5,8 @@ import { getJwt, invalidateJwt } from '@/lib/jwtCache';
 import { apiGet, apiPost, apiPatch } from './apiClient';
 import { backendProgressionService } from './backendProgression.service';
 
-interface ProfileDto { userId: string; username: string; displayName: string; bio: string; avatarId: string; createdAt: string; }
+interface ProfileDto { userId: string; username: string; displayName: string; bio: string; avatarId: string; createdAt: string; adminRole?: string | null; }
 interface StatsDto { totalGames: number; gamesWon: number; correctGuesses: number; totalPoints: number; }
-interface AdminDto { role: 'superadmin' | 'admin' | 'moderator' | 'content_manager' | 'analyst'; }
 
 // Appwrite rejects a new session while one is active (e.g. a lingering guest session), so clear it first.
 async function clearActiveSession(): Promise<void> {
@@ -16,19 +15,15 @@ async function clearActiveSession(): Promise<void> {
 }
 
 async function toUser(profile: ProfileDto, email?: string): Promise<User> {
-  const [stats, progression, admin] = await Promise.all([
+  const [stats, progression] = await Promise.all([
     apiGet<StatsDto>('/api/statistics/me'),
     backendProgressionService.getMine(),
-    apiGet<AdminDto>('/api/admin/me').catch((error: unknown) => {
-      if (error instanceof Error && 'status' in error && error.status === 403) return null;
-      throw error;
-    }),
   ]);
-  const role: User['role'] = admin?.role === 'superadmin' ? 'superadmin'
-    : admin?.role === 'admin' ? 'admin'
-      : admin?.role === 'moderator' ? 'moderator'
-        : admin?.role === 'content_manager' ? 'content_manager'
-          : admin?.role === 'analyst' ? 'analyst'
+  const role: User['role'] = profile.adminRole === 'superadmin' ? 'superadmin'
+    : profile.adminRole === 'admin' ? 'admin'
+      : profile.adminRole === 'moderator' ? 'moderator'
+        : profile.adminRole === 'content_manager' ? 'content_manager'
+          : profile.adminRole === 'analyst' ? 'analyst'
         : email ? 'player' : 'guest';
   return {
     id: profile.userId,

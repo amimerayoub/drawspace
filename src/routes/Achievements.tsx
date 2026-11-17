@@ -1,9 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Navigate } from 'react-router-dom';
 import { useI18n } from '@/i18n/I18nContext';
 import { useAuth } from '@/context/AuthContext';
 import { useToast } from '@/context/ToastContext';
-import { backendProgressionService, type ProgressionSnapshot } from '@/services/backendProgression.service';
+import { backendProgressionService } from '@/services/backendProgression.service';
+import { useInvalidateProgression, useProgression } from '@/hooks/useQueries';
 import { AchievementIcon, TitleIcon } from '@/components/Emblems';
 import { Badge, Button, EmptyState, Progress, Tabs } from '@/components/ui';
 import { SeoHead } from '@/components/SeoHead';
@@ -13,9 +14,9 @@ export default function Achievements() {
   const { user, refresh } = useAuth();
   const { toast } = useToast();
   const [tab, setTab] = useState('achievements');
-  const [snapshot, setSnapshot] = useState<ProgressionSnapshot | null>(null);
-  const [error, setError] = useState('');
-  useEffect(() => { if (user) void backendProgressionService.getMine().then(setSnapshot).catch((e: unknown) => setError(e instanceof Error ? e.message : 'Progression could not be loaded.')); }, [user?.id]);
+  const { data: snapshot, error: loadError } = useProgression(user?.id);
+  const invalidateProgression = useInvalidateProgression();
+  const error = loadError instanceof Error ? loadError.message : loadError ? 'Progression could not be loaded.' : '';
 
   if (!user) return <Navigate to={path('/play')} replace />;
   const achievements = snapshot?.achievements || [];
@@ -24,7 +25,7 @@ export default function Achievements() {
   const unlockedCount = achievements.filter((a) => a.unlockedAt).length;
 
   const equip = async (titleId: string | null) => {
-    try { await backendProgressionService.equipTitle(titleId); setSnapshot(await backendProgressionService.getMine()); refresh(); toast(t('toast.saved'), 'success'); }
+    try { await backendProgressionService.equipTitle(titleId); await invalidateProgression(); refresh(); toast(t('toast.saved'), 'success'); }
     catch (e) { toast(e instanceof Error ? e.message : 'Title could not be equipped.', 'error'); }
   };
 

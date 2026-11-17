@@ -40,8 +40,6 @@ export const backendAdminService = {
   setUserRole: (id: string, role: string | null, reason: string) => apiPatch(`/api/admin/users/${encodeURIComponent(id)}/role`, { role, reason }),
   reports: (status: string) => apiGet<Report[]>(`/api/admin/reports?status=${encodeURIComponent(status)}`),
   resolveReport: (id: string, status: 'resolved' | 'dismissed', reason: string) => apiPatch<{ id: string; status: string }>(`/api/admin/reports/${encodeURIComponent(id)}`, { status, reason }),
-  publicArticles: () => apiGet<Article[]>('/api/blog', { auth: 'none' }),
-  publicArticle: (slug: string) => apiGet<Article>(`/api/blog/${encodeURIComponent(slug)}`, { auth: 'none' }),
   activeAd: (placement: 'landing' | 'blog') => apiGet<{ id: string; name: string; body: string; placement: string } | null>(`/api/ads/${placement}`, { auth: 'none' }),
   words: () => apiGet<Word[]>('/api/admin/content/words'),
   saveWord: (word: Word) => apiPut<Word>(`/api/admin/content/words/${encodeURIComponent(word.id)}`, { text: word.text, difficulty: word.difficulty, category: word.category, active: word.active }),

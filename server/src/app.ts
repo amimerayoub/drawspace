@@ -25,7 +25,7 @@ import { progressionRoutes } from './routes/progressionRoutes';
 import { ProgressionRepository } from './repositories/progressionRepository';
 import { AdminDataRepository } from './repositories/adminDataRepository';
 import { AdminUserRepository } from './repositories/adminUserRepository';
-import { contentRoutes, publicAdRoutes, publicBlogRoutes, publicConfigRoutes } from './routes/contentRoutes';
+import { contentRoutes, publicAdRoutes, publicConfigRoutes } from './routes/contentRoutes';
 import { contentApiV1Routes } from './routes/contentApiV1';
 import { mcpAdminApiV1Routes } from './routes/mcpAdminApiV1';
 import { McpKeyService } from './mcp/keyService';
@@ -121,7 +121,7 @@ export function createApp(deps: ApplicationDependencies) {
   });
   app.use('/api', rateLimit(240, 60_000));
   app.use('/api/auth', rateLimit(60, 60_000), authRoutes(verify));
-  app.use('/api/profiles', profileRoutes(verify, profiles));
+  app.use('/api/profiles', profileRoutes(verify, profiles, roles));
   app.use('/api/preferences', preferencesRoutes(verify, preferences));
   app.use('/api/statistics', statisticsRoutes(verify, statistics));
   app.use('/api/guest', rateLimit(20, 60_000), guestRoutes(verify, guests, profiles));
@@ -139,7 +139,6 @@ export function createApp(deps: ApplicationDependencies) {
   app.use('/api/admin/seo', seoAdminRoutes(verify, roles, seo));
   app.use('/api/admin/media', mediaAdminRoutes(verify, roles, media));
   app.use('/api/admin/crm', crmAdminRoutes(verify, roles, crm));
-  app.use('/api/blog', publicBlogRoutes(adminData));
   app.use('/api/ads', publicAdRoutes(adminData));
   app.use('/api/platform/config', publicConfigRoutes(adminData));
   app.use('/', seoPublicRoutes(seo));

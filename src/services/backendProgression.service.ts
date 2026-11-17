@@ -13,7 +13,7 @@ export interface LiveLeaderboardEntry extends Omit<LeaderboardEntry, 'userId'> {
 
 export const backendProgressionService = {
   getMine: () => apiGet<ProgressionSnapshot>('/api/progression/me'),
-  leaderboard: () => apiGet<LiveLeaderboardEntry[]>('/api/progression/leaderboard'),
+  leaderboard: () => apiGet<LiveLeaderboardEntry[]>('/api/progression/leaderboard', { auth: 'optional' }),
   publicAchievements: () => apiGet<Achievement[]>('/api/progression/achievements', { auth: 'none' }),
   equipTitle: (titleId: string | null) => apiPost<{ equippedTitleId: string | null }>('/api/progression/titles/equip', { titleId }),
   claimChallenge: (id: string) => apiPost<{ xp: number }>(`/api/progression/challenges/${encodeURIComponent(id)}/claim`, {}),
