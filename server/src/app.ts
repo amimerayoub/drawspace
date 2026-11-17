@@ -102,11 +102,22 @@ export function createApp(deps: ApplicationDependencies) {
   });
   app.use(cors({
     credentials: true,
+    maxAge: 86400,
     origin(origin, callback) {
       if (!origin || deps.config.frontendOrigins.includes(origin)) callback(null, true);
       else callback(new HttpError(403, 'Origin is not allowed', 'CORS_DENIED'));
     },
   }));
+  // Public reads are short-lived shared-cacheable; personalized and auth reads never cache.
+  const publicCache = [/^\/api\/progression\/achievements$/, /^\/api\/v1\/public\/blogs/, /^\/api\/v1\/blogs\//, /^\/api\/platform\/config$/, /^\/api\/ads\//, /^\/api\/rooms$/];
+  app.use((request, response, next) => {
+    if (request.method === 'GET' && request.path.startsWith('/api/')) {
+      if (publicCache.some((pattern) => pattern.test(request.path))) response.setHeader('Cache-Control', 'public, max-age=30, stale-while-revalidate=60');
+      else if (request.path === '/api/progression/leaderboard') response.setHeader('Cache-Control', 'private, max-age=30, stale-while-revalidate=60');
+      else response.setHeader('Cache-Control', 'private, no-store');
+    }
+    next();
+  });
   const jsonBody = express.json({ limit: '256kb', strict: true });
   const rawUpload = express.raw({ type: () => true, limit: '10mb' });
   // Import payloads and MCP requests carry whole files and get dedicated larger parsers.

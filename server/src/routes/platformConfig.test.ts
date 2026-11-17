@@ -66,3 +66,31 @@ test('public platform config is public-safe, reflects admin updates, and invalid
   assert.equal(afterData.registrationOpen, false);
   assert.equal(afterData.contactEmail, 'support@example.invalid');
 });
+
+test('public GETs are shared-cacheable, personalized reads are not, and CORS preflight is cached', async (t) => {
+  const tables = new IsolatedTables();
+  const database = { tables, databaseId: 'isolated_cache', newId: () => tables.newId(), accountForJwt: () => { throw new Error('test verifier used'); }, users: {} } as unknown as AppwriteDatabase;
+  const verifyJwt = async () => { throw new Error('invalid test token'); };
+  const config: ServerConfig = { nodeEnv: 'test', port: 0, appwriteEndpoint: 'http://127.0.0.1', appwriteProjectId: 'isolated-cache', appwriteApiKey: 'test-only-placeholder', databaseId: 'isolated_cache', frontendOrigins: ['https://drawspace.cloud'], roomStateDriver: 'memory' };
+  const { app } = createApp({ config, database, verifyJwt, matchHistoryRepository: new InMemoryMatchHistoryRepository() });
+  const httpServer = createServer(app);
+  await new Promise<void>((resolve) => httpServer.listen(0, '127.0.0.1', resolve));
+  const address = httpServer.address(); assert.ok(address && typeof address !== 'string');
+  const base = `http://127.0.0.1:${address.port}`;
+  t.after(async () => { await new Promise<void>((resolve) => httpServer.close(() => resolve())); });
+
+  const publicRead = await fetch(`${base}/api/platform/config`);
+  assert.equal(publicRead.headers.get('cache-control'), 'public, max-age=30, stale-while-revalidate=60');
+  const achievements = await fetch(`${base}/api/progression/achievements`);
+  assert.equal(achievements.headers.get('cache-control'), 'public, max-age=30, stale-while-revalidate=60');
+  const leaderboard = await fetch(`${base}/api/progression/leaderboard`);
+  assert.equal(leaderboard.headers.get('cache-control'), 'private, max-age=30, stale-while-revalidate=60');
+  const me = await fetch(`${base}/api/progression/me`);
+  assert.equal(me.headers.get('cache-control'), 'private, no-store');
+
+  const preflight = await fetch(`${base}/api/progression/leaderboard`, { method: 'OPTIONS', headers: { Origin: 'https://drawspace.cloud', 'Access-Control-Request-Method': 'GET' } });
+  assert.equal(preflight.headers.get('access-control-allow-origin'), 'https://drawspace.cloud');
+  assert.equal(preflight.headers.get('access-control-max-age'), '86400');
+  const denied = await fetch(`${base}/api/progression/leaderboard`, { method: 'OPTIONS', headers: { Origin: 'https://evil.example', 'Access-Control-Request-Method': 'GET' } });
+  assert.equal(denied.headers.get('access-control-allow-origin'), null);
+});
