@@ -1,4 +1,4 @@
-import { io, type Socket } from 'socket.io-client';
+import type { Socket } from 'socket.io-client';
 import { ApiError } from './apiClient';
 import { backendAuthService } from './backendAuth.service';
 
@@ -11,23 +11,26 @@ class SocketClient {
   async connect(): Promise<void> {
     if (this.socket?.connected) return;
     if (this.connecting) return this.connecting;
-    this.connecting = new Promise<void>((resolve, reject) => {
-      const socket = io(serverUrl, {
-        autoConnect: false,
-        transports: ['websocket', 'polling'],
-        timeout: 10_000,
-        reconnection: true,
-        auth: async (callback) => {
-          const jwt = await backendAuthService.getAuthJWT();
-          callback({ jwt });
-        },
+    this.connecting = (async () => {
+      const { io } = await import('socket.io-client');
+      await new Promise<void>((resolve, reject) => {
+        const socket = io(serverUrl, {
+          autoConnect: false,
+          transports: ['websocket', 'polling'],
+          timeout: 10_000,
+          reconnection: true,
+          auth: async (callback) => {
+            const jwt = await backendAuthService.getAuthJWT();
+            callback({ jwt });
+          },
+        });
+        this.socket = socket;
+        const timeout = setTimeout(() => { socket.disconnect(); reject(new ApiError('Could not connect to the game server.', 0, 'SOCKET_TIMEOUT')); }, 12_000);
+        socket.once('connect', () => { clearTimeout(timeout); resolve(); });
+        socket.once('connect_error', (error) => { clearTimeout(timeout); reject(new ApiError(error.message || 'Game server connection failed.', 0, 'SOCKET_CONNECTION_FAILED')); });
+        socket.connect();
       });
-      this.socket = socket;
-      const timeout = setTimeout(() => { socket.disconnect(); reject(new ApiError('Could not connect to the game server.', 0, 'SOCKET_TIMEOUT')); }, 12_000);
-      socket.once('connect', () => { clearTimeout(timeout); resolve(); });
-      socket.once('connect_error', (error) => { clearTimeout(timeout); reject(new ApiError(error.message || 'Game server connection failed.', 0, 'SOCKET_CONNECTION_FAILED')); });
-      socket.connect();
-    }).finally(() => { this.connecting = null; });
+    })().finally(() => { this.connecting = null; });
     return this.connecting;
   }
 
