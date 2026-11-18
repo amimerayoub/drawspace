@@ -357,3 +357,26 @@ expect a just-finished match to appear immediately). Both are cheap Node-side re
 
 Estimated effect: removes the recurring config polling entirely and cuts ad fetches to one per
 placement per 5 min per browser session. Nothing pushed or deployed.
+
+## BW5 (part 1) - Stop the recovery sweep re-persisting finished matches
+
+Found while verifying BW5: finished rooms stay in the in-memory state store for 30 days
+(engine.ts extends expiresAt on finish), and the 1 s recovery sweep called
+persistCompletedMatch for every finished room on every tick. Persistence is idempotent, but
+each re-run still cost ~4 Appwrite calls per player (match_history createRow conflict + getRow,
+xp_transactions lookup + player_progression read) - roughly 8 calls/second for a 2-player
+match, for as long as the room lived. This was a continuous background bandwidth leak.
+
+Changes (server/src/socket/handlers.ts):
+- `persistedMatches` Set marks matches whose persistence fully succeeded; the sweep and
+  finishRound skip them. Entries are removed when a room is closed; a server restart re-runs
+  persistence once per recovered finished room (idempotent, same as before).
+- The sweep now isolates failures per room (try/catch inside the loop, logging the room code)
+  so one stuck room can no longer block recovery of every other room. The recurring
+  `[room-recovery-sweep] GameError` log line (present since before BW1) was this: one bad room
+  aborted the whole sweep every second.
+
+Verification: new matchPersistenceSweep.integration.test.ts drives a full 2-turn match over
+real socket.io with a call-counting TablesDB double, then asserts zero additional Appwrite
+calls across 2+ sweep ticks (and zero duplicate-conflict getRows). Confirmed the test fails
+with the fix removed. Full gates: typecheck x2, 158 tests pass / 0 fail / 4 skipped, build.

@@ -59,6 +59,9 @@ export async function createSocketHandlers(io: Server, deps: SocketDependencies)
   const matchPersistence = new MatchPersistenceService(new AppwriteMatchHistoryRepository(deps.wordsDatabase), progression);
   const persistenceRetries = new Map<string, { after: number; attempts: number }>();
   const persistingMatches = new Set<string>();
+  // Finished rooms linger in the state store for 30 days; without this marker the
+  // recovery sweep would re-run persistence (and its Appwrite reads) every second.
+  const persistedMatches = new Set<string>();
   let settingsCache: { value: Awaited<ReturnType<GameSettingsRepository['get']>>; at: number } | null = null;
   const guessTimesByUser = new Map<string, number[]>();
   const joinAttemptsByUser = new Map<string, number[]>();
@@ -347,7 +350,7 @@ export async function createSocketHandlers(io: Server, deps: SocketDependencies)
 
   async function persistCompletedMatch(room: Awaited<ReturnType<GameEngine['get']>>) {
     const retry = persistenceRetries.get(room.id);
-    if (persistingMatches.has(room.id) || (retry?.after || 0) > Date.now()) return;
+    if (persistedMatches.has(room.id) || persistingMatches.has(room.id) || (retry?.after || 0) > Date.now()) return;
     persistingMatches.add(room.id);
     try {
       const outcomes = await matchPersistence.persist(room);
@@ -356,6 +359,7 @@ export async function createSocketHandlers(io: Server, deps: SocketDependencies)
         if (socketId && !result.duplicate) io.to(socketId).emit('game:progression-earned', result);
       }
       persistenceRetries.delete(room.id);
+      persistedMatches.add(room.id);
     } catch (error) {
       const attempts = (retry?.attempts || 0) + 1;
       const nextDelay = Math.min(60_000, 2_000 * 2 ** Math.min(attempts - 1, 5));
@@ -386,13 +390,16 @@ export async function createSocketHandlers(io: Server, deps: SocketDependencies)
   const recoverySweep=setInterval(()=>{void (async()=>{
     const rooms=await deps.game.listAll();
     for(const room of rooms){
-      if(room.status==='drawing'&&room.deadline<=Date.now())await finishRound(room.code);
-      else if(room.status==='choosing'&&room.choiceDeadline<=Date.now()){
-        if(room.choices.length)await chooseWord(room.code,room.drawerUserId!,room.choices[0].id);
-        else await offerWords(room.code,room.drawerUserId!);
-      } else if(room.status==='round_end'&&room.transitionAt<=Date.now()){
-        const next=await deps.game.nextRound(room.code,room.hostUserId);await offerWords(room.code,next.drawer.userId);io.to(room.code).emit('room:update',deps.game.publicRoom(next.room));
-      } else if(room.status==='finished') await persistCompletedMatch(room);
+      // One stuck room must not block recovery of every other room.
+      try{
+        if(room.status==='drawing'&&room.deadline<=Date.now())await finishRound(room.code);
+        else if(room.status==='choosing'&&room.choiceDeadline<=Date.now()){
+          if(room.choices.length)await chooseWord(room.code,room.drawerUserId!,room.choices[0].id);
+          else await offerWords(room.code,room.drawerUserId!);
+        } else if(room.status==='round_end'&&room.transitionAt<=Date.now()){
+          const next=await deps.game.nextRound(room.code,room.hostUserId);await offerWords(room.code,next.drawer.userId);io.to(room.code).emit('room:update',deps.game.publicRoom(next.room));
+        } else if(room.status==='finished') await persistCompletedMatch(room);
+      }catch(error){console.error('[room-recovery-sweep]',room.code,error instanceof Error?error.name:'unknown');}
     }
   })().catch(error=>console.error('[room-recovery-sweep]',error instanceof Error?error.name:'unknown'));},1000);
   recoverySweep.unref();
@@ -400,6 +407,7 @@ export async function createSocketHandlers(io: Server, deps: SocketDependencies)
   return {
     roomClosed(room) {
       clearTimers(room.code);
+      persistedMatches.delete(room.id);
       for (const player of room.players.values()) io.to(player.lastSocketId).emit('room:closed', { code: room.code, reason: 'This room was closed by a moderator.' });
       io.in(room.code).socketsLeave(room.code);
     },
