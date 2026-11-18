@@ -380,3 +380,39 @@ Verification: new matchPersistenceSweep.integration.test.ts drives a full 2-turn
 real socket.io with a call-counting TablesDB double, then asserts zero additional Appwrite
 calls across 2+ sweep ticks (and zero duplicate-conflict getRows). Confirmed the test fails
 with the fix removed. Full gates: typecheck x2, 158 tests pass / 0 fail / 4 skipped, build.
+
+## BW5 (part 2) - ETag/304 revalidation, leaderboard compute cache, gzip
+
+Changes:
+- `/api/me/*` GETs now send `Cache-Control: private, max-age=0` instead of `no-store`
+  (server/src/app.ts). The browser may store the response but must revalidate every use;
+  Express's built-in weak ETag + If-None-Match handling then answers 304 with no body.
+  Public GETs keep `public, max-age=30, stale-while-revalidate=60` (from T5) and now also
+  revalidate via ETag after expiry. Other authenticated routes stay `private, no-store`.
+  Access-Control-Max-Age 86400 was already set in T5.
+- Leaderboard compute cache (server/src/repositories/progressionRepository.ts): the four
+  500-row scans (player_progression, profiles, user_statistics, titles) now run at most once
+  per 30 s per period, single-flight, and are select-only (userId/level/xp/title, username/
+  avatar, gamesWon, title name/description/icon). The HTTP response stays `private` because
+  it embeds per-viewer `isMe`. Catalog edits (e.g. renaming a title) invalidate the cached
+  board immediately via invalidateCatalogCaches; player writes refresh it on TTL expiry.
+- gzip compression: added the standard `compression` middleware (7 tiny packages, most
+  already in the express tree; no Redis, no infrastructure). JSON over 1 KB is gzipped when
+  the client accepts it; images and other incompressible types are skipped. Measured live:
+  leaderboard 2324 -> 254 bytes (-89%), /me/bootstrap 3067 -> 851 bytes (-72%).
+
+Verification: typecheck x2, 159 tests pass / 0 fail / 4 skipped, build. New tests:
+leaderboard cache + select-only + title-edit invalidation (progressionCache.test.ts);
+httpE2e asserts public 304, /me `private, max-age=0` + 304, and raw gzip bytes on the
+leaderboard. Test note: conditional requests use raw node:http because undici fetch injects
+`cache-control: no-cache`, which Express's freshness check treats as stale - browsers
+revalidate without it (confirmed live with curl and raw http: 304, zero bytes).
+Live probe (probe-bw5.cjs, 12 checks on backend 3006): all pass. Browser probes on the BW5
+stack (vite 5177 -> backend 3007): BW4 navigation still 1 config + 1 ad per placement; the
+full BW3 guest session shows identical request counts (bootstrap 2, progression/me 1, zero
+per-user GETs, zero errors); live socket round PASS.
+
+Notes: the first BW5 dev instance (3006) was started without the 5176 origin and its wrapper
+was stopped but the node process survived (port kept); killing it was blocked, so the verified
+BW5 stack runs on 3007 + 5177. 3006 is idle and can be closed during instance consolidation.
+Nothing pushed or deployed.

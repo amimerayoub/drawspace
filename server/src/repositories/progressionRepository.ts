@@ -68,11 +68,15 @@ export class ProgressionRepository {
   }
 
   async leaderboard(period = 'all-time') {
+    return this.cache.read(`leaderboard:${period}`, () => this.computeLeaderboard(), 30_000);
+  }
+
+  private async computeLeaderboard() {
     const [progressions, profiles, statistics, titles] = await Promise.all([
-      this.list('player_progression', [Query.limit(500)]),
-      new RowRepository(this.database, 'profiles').list([Query.limit(500)]),
-      new RowRepository(this.database, 'user_statistics').list([Query.limit(500)]),
-      this.list('titles', [Query.equal('isActive', true), Query.limit(200)]),
+      this.list('player_progression', [Query.select(['userId', 'currentLevel', 'totalXP', 'equippedTitleId']), Query.limit(500)]),
+      new RowRepository(this.database, 'profiles').list([Query.select(['userId', 'username', 'displayName', 'avatarId']), Query.limit(500)]),
+      new RowRepository(this.database, 'user_statistics').list([Query.select(['userId', 'gamesWon']), Query.limit(500)]),
+      this.list('titles', [Query.equal('isActive', true), Query.select(['titleId', 'name', 'description', 'iconAsset']), Query.limit(200)]),
     ]);
     const profileById = new Map(profiles.map((row) => [String(row.userId), row]));
     const statsById = new Map(statistics.map((row) => [String(row.userId), row]));

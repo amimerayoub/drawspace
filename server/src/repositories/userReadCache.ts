@@ -57,8 +57,8 @@ export class UserReadCache {
   }
 
   invalidateCatalogs(): void {
-    // Dashboards embed catalog rows, so a catalog edit expires them too.
-    this.invalidateMatching((key) => key.startsWith('catalog:') || key.startsWith('dashboard:'));
+    // Dashboards and the leaderboard embed catalog rows, so a catalog edit expires them too.
+    this.invalidateMatching((key) => key.startsWith('catalog:') || key.startsWith('dashboard:') || key.startsWith('leaderboard:'));
   }
 
   private invalidateMatching(matches: (key: string) => boolean): void {

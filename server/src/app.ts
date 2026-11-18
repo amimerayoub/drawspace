@@ -1,5 +1,6 @@
 import express from 'express';
 import cors from 'cors';
+import compression from 'compression';
 import helmet from 'helmet';
 import type { ServerConfig } from './config/env';
 import type { AppwriteDatabase } from './database/appwrite';
@@ -112,12 +113,15 @@ export function createApp(deps: ApplicationDependencies) {
       else callback(new HttpError(403, 'Origin is not allowed', 'CORS_DENIED'));
     },
   }));
+  app.use(compression());
   // Public reads are short-lived shared-cacheable; personalized and auth reads never cache.
   const publicCache = [/^\/api\/progression\/achievements$/, /^\/api\/v1\/public\/blogs/, /^\/api\/v1\/blogs\//, /^\/api\/platform\/config$/, /^\/api\/ads\//, /^\/api\/rooms$/];
   app.use((request, response, next) => {
     if (request.method === 'GET' && request.path.startsWith('/api/')) {
       if (publicCache.some((pattern) => pattern.test(request.path))) response.setHeader('Cache-Control', 'public, max-age=30, stale-while-revalidate=60');
       else if (request.path === '/api/progression/leaderboard') response.setHeader('Cache-Control', 'private, max-age=30, stale-while-revalidate=60');
+      // max-age=0 (not no-store) lets the browser revalidate with If-None-Match and get a 304.
+      else if (request.path.startsWith('/api/me/')) response.setHeader('Cache-Control', 'private, max-age=0');
       else response.setHeader('Cache-Control', 'private, no-store');
       // Explicit freshness would let browsers store 4xx/5xx bodies and replay them for 30s.
       const writeHead = response.writeHead.bind(response) as (...args: unknown[]) => typeof response;

@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { createServer } from 'node:http';
+import { createServer, get as httpGet } from 'node:http';
 import { test } from 'node:test';
 import { Server } from 'socket.io';
 import { io as createSocketClient, type Socket } from 'socket.io-client';
@@ -107,6 +107,8 @@ test('HTTP + Socket.IO E2E auth, profile, room lifecycle, match ownership, valid
   await tables.createRow('isolated_http_e2e', 'player_progression', 'http_e2e_progress_b', { userId: 'e2e-user-b', currentLevel: 2, totalXP: 100, highestLevel: 2, equippedTitleId: '' });
   await tables.createRow('isolated_http_e2e', 'user_statistics', 'http_e2e_stats_a', { userId: 'e2e-user-a', gamesWon: 2 });
   await tables.createRow('isolated_http_e2e', 'user_statistics', 'http_e2e_stats_b', { userId: 'e2e-user-b', gamesWon: 1 });
+  // Pad the leaderboard past the 1 KB compression threshold.
+  for (let i = 1; i <= 8; i += 1) await tables.createRow('isolated_http_e2e', 'player_progression', `http_e2e_pad_${i}`, { userId: `e2e-pad-${i}`, currentLevel: 1, totalXP: 10, highestLevel: 1, equippedTitleId: '' });
   const bootstrap = await fetch(`${base}/api/me/bootstrap`, { headers: authA });
   assert.equal(bootstrap.status, 200);
   const bootstrapData = (await bootstrap.json()).data;
@@ -127,6 +129,35 @@ test('HTTP + Socket.IO E2E auth, profile, room lifecycle, match ownership, valid
   assert.equal(personalizedLeaderboard.status, 200);
   assert.equal(personalizedRows.find((row: { username: string }) => row.username === 'AliceE2E').isMe, true);
   assert.equal(personalizedRows.find((row: { username: string }) => row.username === 'BobE2E').isMe, false);
+
+  // BW5: ETag revalidation on public and /me GETs; /me stays private but revalidatable.
+  // Conditional requests use raw http: undici fetch injects "cache-control: no-cache",
+  // which Express's freshness check treats as stale (browsers revalidate without it).
+  const conditionalGet = (path: string, headers: Record<string, string>) => new Promise<{ status: number }>((resolve, reject) => {
+    httpGet(`${base}${path}`, { headers }, (res) => { res.resume(); res.on('end', () => resolve({ status: res.statusCode ?? 0 })); }).on('error', reject);
+  });
+  const configFirst = await fetch(`${base}/api/platform/config`);
+  assert.equal(configFirst.status, 200);
+  assert.match(configFirst.headers.get('cache-control') ?? '', /public, max-age=30, stale-while-revalidate=60/);
+  const configEtag = configFirst.headers.get('etag');
+  assert.ok(configEtag, 'public GET carries an ETag');
+  const configRevalidated = await conditionalGet('/api/platform/config', { 'If-None-Match': configEtag! });
+  assert.equal(configRevalidated.status, 304);
+  const bootstrapAgain = await fetch(`${base}/api/me/bootstrap`, { headers: authA });
+  assert.equal(bootstrapAgain.status, 200);
+  assert.equal(bootstrapAgain.headers.get('cache-control'), 'private, max-age=0');
+  const bootstrapEtag = bootstrapAgain.headers.get('etag');
+  assert.ok(bootstrapEtag, '/me GET carries an ETag');
+  const bootstrapRevalidated = await conditionalGet('/api/me/bootstrap', { Authorization: 'Bearer e2e-token-a', 'If-None-Match': bootstrapEtag! });
+  assert.equal(bootstrapRevalidated.status, 304);
+  // Compression: raw request so the encoded bytes and headers are observable.
+  const gzipResponse = await new Promise<{ headers: NodeJS.Dict<string | string[]>; body: Buffer }>((resolve, reject) => {
+    httpGet(`${base}/api/progression/leaderboard`, { headers: { 'Accept-Encoding': 'gzip' } }, (res) => {
+      const chunks: Buffer[] = []; res.on('data', (chunk: Buffer) => chunks.push(chunk)); res.on('end', () => resolve({ headers: res.headers, body: Buffer.concat(chunks) }));
+    }).on('error', reject);
+  });
+  assert.equal(gzipResponse.headers['content-encoding'], 'gzip');
+  assert.equal(gzipResponse.body[0], 0x1f); assert.equal(gzipResponse.body[1], 0x8b);
 
   const ownMatches = await fetch(`${base}/api/matches/me?limit=1&offset=0`, { headers: authA });
   const ownData = await ownMatches.json(); assert.equal(ownMatches.status, 200); assert.equal(ownData.data.length, 1); assert.equal(ownData.data[0].username, 'AliceE2E');

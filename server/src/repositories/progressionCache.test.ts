@@ -7,6 +7,7 @@ import type { AppwriteDatabase } from '../database/appwrite';
 class CountingTables {
   private readonly tables = new Map<string, Map<string, Record<string, unknown>>>();
   readonly listCalls = new Map<string, number>();
+  readonly lastQueries = new Map<string, string[]>();
   private nextId = 0;
   private table(id: string) { let rows = this.tables.get(id); if (!rows) { rows = new Map(); this.tables.set(id, rows); } return rows; }
   async createRow(_d: string, tableId: string, id: string, data: Record<string, unknown>) { const rows = this.table(tableId); if (rows.has(id)) throw Object.assign(new Error('duplicate'), { code: 409 }); const row = { ...structuredClone(data), $id: id }; rows.set(id, row); return structuredClone(row); }
@@ -14,6 +15,7 @@ class CountingTables {
   async deleteRow(_d: string, tableId: string, id: string) { this.table(tableId).delete(id); }
   async listRows(_d: string, tableId: string, queries: string[] = []) {
     this.listCalls.set(tableId, (this.listCalls.get(tableId) ?? 0) + 1);
+    this.lastQueries.set(tableId, queries);
     let rows = [...this.table(tableId).values()]; let limit = 25;
     for (const encoded of queries) {
       const q = JSON.parse(encoded) as { method: string; attribute?: string; values?: unknown[] };
@@ -81,4 +83,35 @@ test('admin catalog edits invalidate cached dashboards', async () => {
   const after = await progression.dashboard('catalog-user');
   assert.equal(after.achievements.length, 1);
   assert.equal(after.achievements[0].id, 'a-new');
+});
+
+test('leaderboard compute is cached, select-only, and invalidated by title edits', async () => {
+  const tables = new CountingTables();
+  const database = makeDatabase(tables);
+  const progression = new ProgressionRepository(database);
+  const catalog = new CatalogRepository(database);
+  await tables.createRow('db', 'player_progression', 'lb-p1', { userId: 'lb-user', totalXP: 300, currentLevel: 3, highestLevel: 3, equippedTitleId: 't1' });
+  await tables.createRow('db', 'profiles', 'lb-pr1', { userId: 'lb-user', username: 'LBUser', displayName: 'LB User', avatarId: 'av-02', bio: 'x'.repeat(500) });
+  await tables.createRow('db', 'user_statistics', 'lb-s1', { userId: 'lb-user', gamesWon: 4, totalGames: 9 });
+  await tables.createRow('db', 'titles', 'lb-t1', { titleId: 't1', name: 'Champion', description: 'Top', iconAsset: '', isActive: true });
+
+  const first = await progression.leaderboard();
+  assert.equal(first.length, 1);
+  assert.equal(first[0].username, 'LBUser');
+  assert.equal(first[0].titleName, 'Champion');
+  assert.equal(first[0].wins, 4);
+  const callsAfterFirst = new Map(tables.listCalls);
+  for (const table of ['player_progression', 'profiles', 'user_statistics', 'titles']) {
+    assert.equal(callsAfterFirst.get(table), 1, `${table} scanned once`);
+    const methods = (tables.lastQueries.get(table) ?? []).map((encoded) => (JSON.parse(encoded) as { method: string }).method);
+    assert.ok(methods.includes('select'), `${table} scan is select-only`);
+  }
+
+  const second = await progression.leaderboard();
+  assert.deepEqual(second, first);
+  assert.deepEqual(tables.listCalls, callsAfterFirst, 'a repeat leaderboard within the TTL reads nothing');
+
+  await catalog.save('titles', 't1', { name: 'Grand Champion', description: 'Top', iconAsset: '', isActive: true }, actor);
+  const third = await progression.leaderboard();
+  assert.equal(third[0].titleName, 'Grand Champion');
 });
