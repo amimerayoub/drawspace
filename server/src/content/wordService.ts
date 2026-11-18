@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { Query, type AppwriteDatabase } from '../database/appwrite';
 import { HttpError } from '../middleware/errors';
 import { RowRepository, type Row } from '../repositories/rowRepository';
+import { invalidateWords } from '../repositories/wordRepository';
 
 export type WordDifficulty = 'easy' | 'medium' | 'hard';
 export const WORD_DIFFICULTIES: WordDifficulty[] = ['easy', 'medium', 'hard'];
@@ -153,6 +154,7 @@ export class WordService {
     if (rows.some((row) => normalizeWord(String(row.word ?? '')) === normalized)) throw new HttpError(409, 'This word already exists.', 'WORD_DUPLICATE');
     await this.ensureCategory(clean.category);
     const row = await this.insertWord(clean);
+    invalidateWords();
     await this.writeAudit(actor, 'word.create', 'custom_word', clean.id || String(row.id), clean.word);
     return this.toRecord(row);
   }
@@ -174,6 +176,7 @@ export class WordService {
     if (optional.has('normalizedWord')) data.normalizedWord = normalized;
     if (optional.has('updatedAt')) data.updatedAt = now;
     const row = await this.words.patch(existing.$id, data);
+    invalidateWords();
     await this.writeAudit(actor, 'word.update', 'custom_word', id, clean.word);
     return this.toRecord(row);
   }
@@ -183,6 +186,7 @@ export class WordService {
     const existing = rows.find((row) => String(row.id ?? row.$id) === id);
     if (!existing) throw new HttpError(404, 'Word not found.', 'WORD_NOT_FOUND');
     await this.words.delete(existing.$id);
+    invalidateWords();
     await this.writeAudit(actor, 'word.delete', 'custom_word', id, String(existing.word ?? ''));
   }
 
@@ -243,6 +247,7 @@ export class WordService {
         results.push({ index, word: String(input.word ?? ''), status: 'failed', error: error instanceof Error ? error.message : 'Import failed.' }); failed += 1;
       }
     }
+    if (!dryRun && (created > 0 || updated > 0)) invalidateWords();
     if (!dryRun) await this.writeAudit(actor, auditAction, 'custom_word', `bulk:${results.length}`, `${strategy}: +${created} ~${updated} skip ${skipped} fail ${failed}`);
     return { results, created, updated, skipped, failed, dryRun, warnings };
   }
@@ -257,6 +262,7 @@ export class WordService {
       await this.words.patch(row.$id, { isActive: active });
       updated.push(id);
     }
+    if (updated.length > 0) invalidateWords();
     await this.writeAudit(actor, active ? 'word.bulk_activate' : 'word.bulk_deactivate', 'custom_word', `bulk:${updated.length}`, `${updated.length} words`);
     return { updated, notFound };
   }
@@ -271,6 +277,7 @@ export class WordService {
       await this.words.delete(row.$id);
       deleted.push(id);
     }
+    if (deleted.length > 0) invalidateWords();
     await this.writeAudit(actor, 'word.bulk_delete', 'custom_word', `bulk:${deleted.length}`, `${deleted.length} words`);
     return { deleted, notFound };
   }
@@ -321,6 +328,7 @@ export class WordService {
       if (String(row.category ?? '') === oldName) { await this.words.patch(row.$id, { category: clean }); wordCount += 1; }
     }
     if (target) await this.categories.patch(target.$id, { name: clean, slug: slugifyName(clean) });
+    if (wordCount > 0) invalidateWords();
     await this.writeAudit(actor, 'word_category.rename', 'word_category', id, `${oldName} -> ${clean} (${wordCount} words)`);
     return { id: target ? String(target.id) : slugifyName(clean), name: clean, slug: slugifyName(clean), wordCount };
   }
@@ -341,6 +349,7 @@ export class WordService {
       for (const row of affected) await this.words.patch(row.$id, { category: replacement });
     }
     if (target) await this.categories.delete(target.$id);
+    if (affected.length > 0) invalidateWords();
     await this.writeAudit(actor, 'word_category.delete', 'word_category', id, `${oldName}: ${affected.length} words reassigned`);
     return { deleted: true, reassigned: affected.length };
   }

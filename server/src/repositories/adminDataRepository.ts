@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { Query, type AppwriteDatabase } from '../database/appwrite';
 import { RowRepository, type Row } from './rowRepository';
+import { invalidateWords } from './wordRepository';
 import { prepareStudio } from '../content/studioContent';
 
 type Actor = { userId: string; username: string; role: string };
@@ -33,10 +34,11 @@ export class AdminDataRepository {
     if (duplicate && duplicate.$id !== existing?.$id) throw new Error('This word already exists.');
     const data = { id: input.id, word: input.text, difficulty: input.difficulty, category: input.category, isActive: input.active };
     if (existing) await this.words.patch(existing.$id, data); else await this.words.insert(data);
+    invalidateWords();
     await this.writeAudit(actor, existing ? 'word.update' : 'word.create', 'custom_word', input.id, `${input.text} (${input.difficulty})`);
     return input;
   }
-  async deleteWord(id: string, actor: Actor) { const row = await this.words.findOne('id', id); if (!row) throw new Error('Word not found.'); await this.words.delete(row.$id); await this.writeAudit(actor, 'word.delete', 'custom_word', id, 'deleted'); }
+  async deleteWord(id: string, actor: Actor) { const row = await this.words.findOne('id', id); if (!row) throw new Error('Word not found.'); await this.words.delete(row.$id); invalidateWords(); await this.writeAudit(actor, 'word.delete', 'custom_word', id, 'deleted'); }
 
   async listPosts(includeDrafts: boolean) {
     const rows = await this.posts.list([Query.limit(500)]);

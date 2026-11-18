@@ -77,13 +77,9 @@ test('content API v1 enforces auth, confirmations, draft privacy, duplicates and
   assert.equal(inactiveWord.status, 201);
 
   const publicWords = await fetch(`${base}/api/v1/words`);
-  assert.equal(publicWords.status, 200);
-  const publicWordBody = await json(publicWords);
-  const publicWordList = publicWordBody.data as unknown as { word: string; hint?: string }[];
-  assert.deepEqual(publicWordList.map((item) => item.word), ['Otter']);
-  assert.equal('hint' in publicWordList[0], false);
+  assert.equal(publicWords.status, 404);
   const publicCategories = await fetch(`${base}/api/v1/words/categories`);
-  assert.equal(publicCategories.status, 200);
+  assert.equal(publicCategories.status, 404);
 
   const wordDeleteNoConfirm = await fetch(`${base}/api/v1/admin/words/${word.id}`, { method: 'DELETE', headers: adminHeaders, body: JSON.stringify({}) });
   assert.equal(wordDeleteNoConfirm.status, 400);

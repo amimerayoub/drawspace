@@ -157,17 +157,7 @@ export function contentApiV1Routes(verify: JwtVerifier, roles: AdminRoleReposito
       response.json({ success: true, data: article });
     } catch (error) { next(error); }
   });
-  router.get('/words', async (request, response, next) => {
-    try {
-      const query = wordListQuery(request);
-      const result = await words.list({ ...query, active: true });
-      const items = result.items.map(({ id, word, category, difficulty, language }) => ({ id, word, category, difficulty, language }));
-      response.json({ data: items, pagination: pagination(result, query.limit) });
-    } catch (error) { next(error); }
-  });
-  router.get('/words/categories', async (_request, response, next) => {
-    try { response.json({ data: await words.listCategories(true) }); } catch (error) { next(error); }
-  });
+  // The word pool is game-secret: no public listing. Admin/MCP routes below stay authenticated.
 
   const adminRouter = Router();
   adminRouter.use(admin, editorAccess);

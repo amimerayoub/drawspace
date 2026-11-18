@@ -193,3 +193,40 @@ Skipped / notes:
 - No ESLint config in the repo; typecheck serves as the lint gate.
 - Dev guest limit is 5/h per IP; restarting the dev server resets the in-memory windows.
 - Nothing was pushed or deployed: the live site remains pre-overhaul until explicitly authorized.
+
+## BW1: custom_words in-memory cache (bandwidth task 1)
+
+Measured source: `custom_words` was the top Appwrite consumer at 8.2 MB. `WordRepository.active()`
+ran a 500-row full-metadata `listRows` on every word offer (once per turn, plus intermissions).
+
+Changes:
+- `server/src/repositories/wordRepository.ts` rewritten as a cache module: loads all active words
+  once, paging `Query.limit(100)` + `Query.cursorAfter`, `Query.select(['$id','id','word','category',
+  'difficulty','language'])` (TablesDB still returns system metadata; select trims user attributes:
+  measured 45,184 B -> 32,219 B per 100-row page). Words are grouped by language + difficulty in
+  memory; random picks stay in the socket handler (it already copies before shuffling). TTL 1 h,
+  single-flight shared promise, generation counter so an invalidation mid-load forces a fresh load,
+  stale-on-failure with a guarded 60 s retry, dedupe guard against backends that ignore cursorAfter.
+- Warm at startup: `words.warm()` in `createSocketHandlers` (server/src/socket/handlers.ts:52).
+- `invalidateWords()` exported and called from every word mutation: `adminDataRepository.saveWord/
+  deleteWord` and `wordService` create/update/delete/bulk/import/setActive/deleteMany/renameCategory/
+  deleteCategory (10 points). Admin edits reach the next round immediately.
+- Public word pool closed per spec ("Do not send the full word list to the client"): removed
+  `GET /api/v1/words` and `GET /api/v1/words/categories` (server/src/routes/contentApiV1.ts).
+  Contract exception, explicitly instructed by the bandwidth spec; neither route was used by the
+  SPA. Authenticated admin/MCP word management is unchanged. docs/DRAWSPACE_API.md updated.
+- Tests: new `server/src/repositories/wordRepository.test.ts` (7 tests: paging + select, grouping,
+  single-flight, TTL refresh, stale-on-failure + retry, invalidation incl. mid-load, cursorAfter
+  dedupe guard). contentApiV1 test now asserts 404 for the removed public routes.
+
+Verification: typecheck (app + server), 137 tests pass / 0 fail / 4 skipped, build. Live smoke on a
+second dev instance (port 3002): two guests -> room -> start -> 3 word choices from the warm cache
+-> choose -> round-start + your-word broadcast (probe-bw1.cjs, PASS). Public /api/v1/words and
+/words/categories answer 404; /api/v1/public/blogs and /api/rooms still 200.
+
+Estimated effect: ~181 KB per turn before -> ~129 KB per hour (400 active words, 4 pages) plus
+admin invalidations. Over the measured window this removes >99% of the 8.2 MB.
+
+Notes: the port-3001 dev backend still runs pre-BW1 code until restarted (process kill was not
+authorized in this session); verification used port 3002. Retry-after-failure also happens on the
+next call, not only on the 60 s timer. Nothing pushed or deployed.

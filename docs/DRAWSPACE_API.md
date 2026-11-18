@@ -8,7 +8,7 @@ Base URL (local development): `http://localhost:3001`
 
 ### Authentication
 
-- Public endpoints (`/api/v1/blogs`, `/api/v1/blogs/:slug`, `/api/v1/public/blogs`, `/api/v1/public/blogs/:slug`, `/api/v1/words`, `/api/v1/words/categories`) require no authentication.
+- Public endpoints (`/api/v1/blogs`, `/api/v1/blogs/:slug`, `/api/v1/public/blogs`, `/api/v1/public/blogs/:slug`) require no authentication. The word pool has no public endpoint.
 - Admin endpoints (`/api/v1/admin/**`) require `Authorization: Bearer <Appwrite JWT>` for a user whose `admin_roles` row is active with role `superadmin`, `admin`, or `content_manager`. Authorization is checked server-side against the database on every request.
 - Missing or invalid session: `401`. Authenticated non-staff: `403`.
 
@@ -110,28 +110,9 @@ Same published-only data with the internal envelope. The detail route also retur
 
 ---
 
-## Public word API
+## Public word API (removed)
 
-### GET /api/v1/words
-
-Active words only, for game clients and public integrations. Hints are never included.
-
-Query: `limit`, `cursor`, `search`, `category`, `difficulty` (`easy|medium|hard`), `language`, `sort`, `order`.
-
-```json
-{
-  "data": [ { "id": "w-1", "word": "Otter", "category": "Animals", "difficulty": "easy", "language": "en" } ],
-  "pagination": { "limit": 25, "total": 1, "nextCursor": null }
-}
-```
-
-### GET /api/v1/words/categories
-
-Categories derived from active words (plus stored categories once the content migration is applied).
-
-```json
-{ "data": [ { "id": "animals", "name": "Animals", "slug": "animals", "wordCount": 12 } ] }
-```
+`GET /api/v1/words` and `GET /api/v1/words/categories` were removed: the active word pool is game-secret and must not be enumerable by clients. Word management stays available through the authenticated admin routes below and the scoped MCP tools. Game clients receive only their three round choices over the socket.
 
 ---
 

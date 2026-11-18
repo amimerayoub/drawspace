@@ -49,6 +49,7 @@ const strokeSchema = z.object({
 
 export async function createSocketHandlers(io: Server, deps: SocketDependencies): Promise<RoomAdminBroadcaster> {
   const words = new WordRepository(deps.wordsDatabase);
+  words.warm();
   const progression = new ProgressionRepository(deps.wordsDatabase);
   const roundTimeouts = new Map<string, NodeJS.Timeout>();
   const roundTicks = new Map<string, NodeJS.Timeout>();
