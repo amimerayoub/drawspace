@@ -28,14 +28,15 @@ function setLink(rel: string, href: string) {
 
 /* Per-route document head: title, description, canonical URL, Open Graph and
    Twitter Card. The generated home share card is the default social image. */
-export function SeoHead({ title, description, image = BRAND.ogHome, type = 'website', canonical: canonicalOverride }: {
-  title: string; description?: string; image?: string; type?: 'website' | 'article'; canonical?: string;
+export function SeoHead({ title, description, image = BRAND.ogHome, type = 'website', canonical: canonicalOverride, noindex = false }: {
+  title: string; description?: string; image?: string; type?: 'website' | 'article'; canonical?: string; noindex?: boolean;
 }) {
   const { locale } = useI18n();
   const { pathname } = useLocation();
   const { config } = usePlatformConfig();
   useEffect(() => {
     document.title = title;
+    setMeta('name', 'robots', noindex ? 'noindex, follow' : 'index, follow');
     const resolvedDescription = description || config.seoDescription || config.tagline;
     if (resolvedDescription) setMeta('name', 'description', resolvedDescription);
     const desc = document.head.querySelector('meta[name="description"]')?.getAttribute('content') ?? '';
@@ -58,6 +59,6 @@ export function SeoHead({ title, description, image = BRAND.ogHome, type = 'webs
     setMeta('name', 'twitter:title', title);
     setMeta('name', 'twitter:description', desc);
     setMeta('name', 'twitter:image', image);
-  }, [title, description, image, type, canonicalOverride, locale, pathname, config.siteName, config.faviconUrl, config.seoDescription, config.tagline]);
+  }, [title, description, image, type, canonicalOverride, noindex, locale, pathname, config.siteName, config.faviconUrl, config.seoDescription, config.tagline]);
   return null;
 }

@@ -6,7 +6,7 @@ export default function NotFound() {
   const { t, path } = useI18n();
   return (
     <div className="page container container-narrow">
-      <SeoHead title={`${t('notFound.title')} · DrawSpace`} />
+      <SeoHead title={`${t('notFound.title')} · DrawSpace`} noindex />
       <div className="notfound">
         <p className="notfound-code mono accent">404</p>
         <h1 className="page-title">{t('notFound.title')}</h1>

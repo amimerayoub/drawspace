@@ -559,3 +559,37 @@ counted window - its reduction is reasoned from the call site, not measured here
 Verification: typecheck x2, 161 tests pass / 0 fail / 4 skipped, build (unchanged from BW6 -
 BW7 adds no source code, only this report and Temp scratch probes). Both A/B sessions passed
 all 17 probe checks.
+
+## Frontend routing + error-page SEO (Cloudflare Pages SPA fallback)
+
+Problem: direct loads/refreshes of every client route (e.g. https://drawspace.cloud/en-US)
+returned a hard 404 ("Not found"); only `/` worked. Root cause: commit 6750c5b added a
+top-level `public/404.html` to serve real 404s for missing assets. Cloudflare Pages treats a
+top-level 404.html as "not a single-page application" (Serving Pages doc: "If your project
+does not include a top-level 404.html file, Pages assumes that you are deploying a
+single-page application"), so it stopped falling back to index.html and served 404.html for
+ALL unmatched routes. The `_redirects` `/* /index.html 200` rewrite no longer rescued them.
+
+Fix:
+- Moved `public/404.html` -> `public/errors/not-found.html` (off the top level) so Pages
+  resumes SPA mode. `_redirects` now: `/assets/* /errors/not-found.html 404` (real 404 for
+  missing assets preserved) and `/* /index.html 200` (SPA fallback).
+- Error-page SEO schema: `SeoHead` gained a `noindex` prop that sets
+  `<meta name="robots" content="noindex, follow">` and resets to `index, follow` on every
+  other route, so it never leaks across SPA navigation. `NotFound.tsx` passes `noindex`. The
+  static `errors/not-found.html` also carries `noindex, follow` plus minimal markup.
+
+Tradeoff (simplest option): unknown client routes are now soft-404 (HTTP 200 + the SPA
+NotFound page) rather than hard-404, because a static SPA host cannot know valid client
+routes server-side. `noindex, follow` tells search engines not to index them - the standard
+SPA approach. Missing /assets/* still return a real HTTP 404.
+
+Verification: build + tsc --noEmit clean; dist has NO top-level 404.html, includes
+errors/not-found.html (noindex) and the updated _redirects; backend suite 161 pass / 0 fail /
+4 skipped; local preview + browser confirmed /en-US renders Landing (robots index,follow), an
+unknown route renders NotFound (robots noindex,follow), and client-side navigation home
+resets robots to index,follow.
+
+Manual step: takes effect live only after the FRONTEND is rebuilt and redeployed to
+Cloudflare Pages (dist is gitignored; Pages builds from source). Commit + push to the branch
+Pages builds from, then trigger/await the Pages deploy. Not committed/pushed/deployed here.
