@@ -1,5 +1,6 @@
 import type { AppwriteDatabase } from '../database/appwrite';
 import { RowRepository, type Row } from './rowRepository';
+import { UserReadCache, invalidateUserCache } from './userReadCache';
 
 export interface ProfileRecord {
   userId: string;
@@ -13,17 +14,22 @@ export interface ProfileRecord {
   updatedAt: string;
 }
 
+const SELECT_FIELDS = ['userId', 'username', 'normalizedUsername', 'displayName', 'bio', 'avatarId', 'accountType', 'createdAt', 'updatedAt'];
+
 export class ProfileRepository {
   private readonly rows: RowRepository;
+  private readonly cache = new UserReadCache();
   constructor(database: AppwriteDatabase) { this.rows = new RowRepository(database, 'profiles'); }
 
   async get(userId: string): Promise<ProfileRecord | null> {
-    const row = await this.rows.findOne('userId', userId);
-    return row ? this.toProfile(row) : null;
+    return this.cache.read(`profiles:${userId}`, async () => {
+      const row = await this.rows.findOne('userId', userId, SELECT_FIELDS);
+      return row ? this.toProfile(row) : null;
+    });
   }
 
   async findUsername(username: string): Promise<ProfileRecord | null> {
-    const row = await this.rows.findOne('normalizedUsername', username.trim().toLowerCase());
+    const row = await this.rows.findOne('normalizedUsername', username.trim().toLowerCase(), SELECT_FIELDS);
     return row ? this.toProfile(row) : null;
   }
 
@@ -42,11 +48,13 @@ export class ProfileRepository {
       createdAt: now,
       updatedAt: now,
     });
+    invalidateUserCache(input.userId);
     return this.toProfile(row);
   }
 
   async update(userId: string, patch: Partial<Pick<ProfileRecord, 'username' | 'displayName' | 'bio' | 'avatarId'>>): Promise<ProfileRecord> {
-    const existing = await this.rows.findOne('userId', userId);
+    // Write paths read fresh: the cached record may be up to 30 s old and lacks the row id.
+    const existing = await this.rows.findOne('userId', userId, SELECT_FIELDS);
     if (!existing) throw new Error('Profile not found');
     const data: Record<string, unknown> = { updatedAt: new Date().toISOString() };
     if (patch.username !== undefined) {
@@ -56,12 +64,17 @@ export class ProfileRepository {
     if (patch.displayName !== undefined) data.displayName = patch.displayName.trim();
     if (patch.bio !== undefined) data.bio = patch.bio.trim();
     if (patch.avatarId !== undefined) data.avatarId = patch.avatarId;
-    return this.toProfile(await this.rows.patch(existing.$id, data));
+    const updated = this.toProfile(await this.rows.patch(existing.$id, data));
+    invalidateUserCache(userId);
+    return updated;
   }
 
   async markRegistered(userId: string): Promise<void> {
-    const existing = await this.rows.findOne('userId', userId);
-    if (existing) await this.rows.patch(existing.$id, { accountType: 'registered', updatedAt: new Date().toISOString() });
+    const existing = await this.rows.findOne('userId', userId, SELECT_FIELDS);
+    if (existing) {
+      await this.rows.patch(existing.$id, { accountType: 'registered', updatedAt: new Date().toISOString() });
+      invalidateUserCache(userId);
+    }
   }
 
   private toProfile(row: Row): ProfileRecord {

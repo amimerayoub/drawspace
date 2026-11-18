@@ -3,11 +3,13 @@ import { Query, type AppwriteDatabase } from '../database/appwrite';
 import { assetPath } from '../lib/assetPath';
 import { RowRepository, type Row } from './rowRepository';
 import { StatisticsRepository } from './statisticsRepository';
+import { UserReadCache, invalidateUserCache } from './userReadCache';
 import { XpConfigRepository } from './xpConfigRepository';
 
 type Table = 'player_progression' | 'xp_transactions' | 'achievements' | 'user_achievements' | 'titles' | 'user_titles' | 'challenges' | 'user_challenges' | 'leaderboard_snapshots';
 const LEVEL_BASE = 100;
 const LEVEL_GROWTH = 1.18;
+const PROGRESSION_SELECT = ['userId', 'totalXP', 'currentLevel', 'highestLevel', 'equippedTitleId'];
 
 export function levelForXp(totalXP: number, base = LEVEL_BASE, growth = LEVEL_GROWTH) {
   let level = 1;
@@ -21,6 +23,7 @@ export class ProgressionRepository {
   private readonly tables = new Map<Table, RowRepository>();
   private readonly statistics: StatisticsRepository;
   private readonly xpConfig: XpConfigRepository;
+  private readonly cache = new UserReadCache();
   constructor(private readonly database: AppwriteDatabase) {
     for (const table of ['player_progression', 'xp_transactions', 'achievements', 'user_achievements', 'titles', 'user_titles', 'challenges', 'user_challenges', 'leaderboard_snapshots'] as const) {
       this.tables.set(table, new RowRepository(database, table));
@@ -30,10 +33,14 @@ export class ProgressionRepository {
   }
 
   async dashboard(userId: string) {
+    return this.cache.read(`dashboard:${userId}`, () => this.buildDashboard(userId));
+  }
+
+  private async buildDashboard(userId: string) {
     const [progression, stats, achievements, unlockedAchievements, titles, unlockedTitles, challenges, userChallenges, transactions] = await Promise.all([
-      this.one('player_progression', 'userId', userId), this.statistics.get(userId), this.list('achievements', [Query.equal('isActive', true), Query.limit(200)]),
-      this.list('user_achievements', [Query.equal('userId', userId), Query.limit(200)]), this.list('titles', [Query.equal('isActive', true), Query.limit(200)]),
-      this.list('user_titles', [Query.equal('userId', userId), Query.limit(200)]), this.list('challenges', [Query.equal('isActive', true), Query.limit(200)]),
+      this.cachedProgression(userId), this.statistics.get(userId), this.activeCatalog('achievements'),
+      this.list('user_achievements', [Query.equal('userId', userId), Query.limit(200)]), this.activeCatalog('titles'),
+      this.list('user_titles', [Query.equal('userId', userId), Query.limit(200)]), this.activeCatalog('challenges'),
       this.list('user_challenges', [Query.equal('userId', userId), Query.limit(200)]), this.list('xp_transactions', [Query.equal('userId', userId), Query.orderDesc('createdAt'), Query.limit(100)]),
     ]);
     const totalXP = Number(progression?.totalXP) || 0;
@@ -80,7 +87,7 @@ export class ProgressionRepository {
   }
 
   async publicAchievements() {
-    const rows = await this.list('achievements', [Query.equal('isActive', true), Query.limit(200)]);
+    const rows = await this.activeCatalog('achievements');
     return rows.map((row) => ({ id: String(row.achievementId), name: String(row.name), description: String(row.description || ''), icon: assetPath(row.iconAsset), xpReward: Number(row.rewardXP) || 0, condition: String(row.conditionType || ''), active: true, goal: Number(row.conditionValue) || 1 }));
   }
 
@@ -90,9 +97,10 @@ export class ProgressionRepository {
       const owned = await this.find('user_titles', [Query.equal('userId', userId), Query.equal('titleId', titleId), Query.limit(1)]);
       if (!title || title.isActive !== true || !owned) throw new Error('That title is not unlocked for this account.');
     }
-    const existing = await this.one('player_progression', 'userId', userId);
+    const existing = await this.one('player_progression', 'userId', userId, PROGRESSION_SELECT);
     if (existing) await this.repo('player_progression').patch(existing.$id, { equippedTitleId: titleId || '', updatedAt: new Date().toISOString() });
     else await this.repo('player_progression').insert({ userId, currentLevel: 1, highestLevel: 1, totalXP: 0, equippedTitleId: titleId || '', updatedAt: new Date().toISOString() });
+    invalidateUserCache(userId);
     return { equippedTitleId: titleId };
   }
 
@@ -107,6 +115,7 @@ export class ProgressionRepository {
     const result = await this.award(userId, xp, `challenge:${challengeId}:${periodKey}:${userId}`, 'challenge', `Challenge: ${String(challenge.name)}`, '');
     if (!result.awarded) throw new Error('Challenge reward has already been claimed.');
     await this.repo('user_challenges').patch(state.$id, { claimed: true });
+    invalidateUserCache(userId);
     return { xp };
   }
 
@@ -118,11 +127,12 @@ export class ProgressionRepository {
     const stats = await this.statistics.recordMatch(player.userId, { totalGames: 1, gamesWon: player.wins, totalGuesses: player.totalGuesses, correctGuesses: player.correctGuesses, totalPoints: player.score });
     await this.unlockEligible(player.userId, stats, award.totalXP);
     await this.updateChallenges(player.userId, { games: 1, wins: player.wins, guesses: player.correctGuesses, points: player.score });
+    invalidateUserCache(player.userId);
     return { duplicate: false, xp, totalXP: award.totalXP };
   }
 
   private async unlockEligible(userId: string, stats: Awaited<ReturnType<StatisticsRepository['get']>>, totalXP: number) {
-    const rows = await this.list('achievements', [Query.equal('isActive', true), Query.limit(200)]);
+    const rows = await this.activeCatalog('achievements');
     for (const row of rows) {
       const condition = String(row.conditionType || '').toLowerCase();
       const value = condition.includes('win') ? stats.gamesWon : condition.includes('guess') ? stats.correctGuesses : condition.includes('game') || condition.includes('match') ? stats.totalGames : condition.includes('point') || condition.includes('score') ? stats.totalPoints : 0;
@@ -136,7 +146,7 @@ export class ProgressionRepository {
       const reward = await this.award(userId, rewardXP, transactionId, 'achievement', `Achievement: ${String(row.name)}`, '');
       if (!reward.awarded) continue;
       await this.repo('user_achievements').insert({ userId, achievementId, unlockedAt: new Date().toISOString(), progressSnapshot: value, rewardTransactionId: transactionId });
-      const progression = await this.one('player_progression', 'userId', userId);
+      const progression = await this.one('player_progression', 'userId', userId, PROGRESSION_SELECT);
       const xpSettings = await this.xpConfig.get();
       const rewardLevel = levelForXp(reward.totalXP, xpSettings.levelBase, xpSettings.levelGrowth).level;
       if (progression) await this.repo('player_progression').patch(progression.$id, { totalXP: reward.totalXP, currentLevel: rewardLevel, highestLevel: Math.max(Number(progression.highestLevel) || 1, rewardLevel), updatedAt: new Date().toISOString() });
@@ -147,7 +157,7 @@ export class ProgressionRepository {
   }
 
   private async unlockTitles(userId: string, stats: Awaited<ReturnType<StatisticsRepository['get']>>) {
-    const titles = await this.list('titles', [Query.equal('isActive', true), Query.limit(200)]);
+    const titles = await this.activeCatalog('titles');
     for (const title of titles) {
       const condition = String(title.unlockCondition || '').toLowerCase();
       const target = Number(condition.match(/\d+/)?.[0] || 1);
@@ -163,17 +173,20 @@ export class ProgressionRepository {
 
   private async updateChallenges(userId: string, delta: { games: number; wins: number; guesses: number; points: number }) {
     const now = new Date();
-    const challenges = await this.list('challenges', [Query.equal('isActive', true), Query.limit(200)]);
+    const challenges = await this.activeCatalog('challenges');
     for (const challenge of challenges) {
       const startsAt = Date.parse(String(challenge.startsAt || ''));
       const endsAt = Date.parse(String(challenge.endsAt || ''));
       if ((Number.isFinite(startsAt) && startsAt > now.getTime()) || (Number.isFinite(endsAt) && endsAt < now.getTime())) continue;
       const periodKey = this.periodKey(String(challenge.period), now);
-      const existing = await this.find('user_challenges', [Query.equal('userId', userId), Query.equal('challengeId', String(challenge.challengeId)), Query.equal('periodKey', periodKey), Query.limit(1)]);
-      if (existing?.claimed === true) continue;
       const type = String(challenge.type || '').toLowerCase();
       const increment = type.includes('win') ? delta.wins : type.includes('guess') ? delta.guesses : type.includes('point') || type.includes('score') ? delta.points : delta.games;
+      // Skip unchanged: a zero increment (or progress already capped at the target) writes nothing.
+      if (increment === 0) continue;
+      const existing = await this.find('user_challenges', [Query.equal('userId', userId), Query.equal('challengeId', String(challenge.challengeId)), Query.equal('periodKey', periodKey), Query.limit(1)]);
+      if (existing?.claimed === true) continue;
       const progress = Math.min(Number(challenge.targetValue) || Number.MAX_SAFE_INTEGER, (Number(existing?.progress) || 0) + increment);
+      if (existing && progress === Number(existing.progress)) continue;
       if (existing) await this.repo('user_challenges').patch(existing.$id, { progress });
       else await this.repo('user_challenges').insert({ userId, challengeId: String(challenge.challengeId), periodKey, progress, completed: progress >= Number(challenge.targetValue), claimed: false });
     }
@@ -182,20 +195,21 @@ export class ProgressionRepository {
   private async award(userId: string, amount: number, transactionIdValue: string, rewardType: string, reason: string, matchId: string) {
     const transactionId = this.transactionId(transactionIdValue);
     const prior = await this.find('xp_transactions', [Query.equal('transactionId', transactionId), Query.limit(1)]);
-    if (prior) return { awarded: false, totalXP: Number((await this.one('player_progression', 'userId', userId))?.totalXP) || 0 };
+    if (prior) return { awarded: false, totalXP: Number((await this.one('player_progression', 'userId', userId, PROGRESSION_SELECT))?.totalXP) || 0 };
     const createdAt = new Date().toISOString();
     try { await this.repo('xp_transactions').insert({ transactionId, amount, userId, rewardType, createdAt, reason, matchId }); }
     catch (error) {
       const raced = await this.find('xp_transactions', [Query.equal('transactionId', transactionId), Query.limit(1)]);
-      if (raced) return { awarded: false, totalXP: Number((await this.one('player_progression', 'userId', userId))?.totalXP) || 0 };
+      if (raced) return { awarded: false, totalXP: Number((await this.one('player_progression', 'userId', userId, PROGRESSION_SELECT))?.totalXP) || 0 };
       throw error;
     }
-    const current = await this.one('player_progression', 'userId', userId);
+    const current = await this.one('player_progression', 'userId', userId, PROGRESSION_SELECT);
     const totalXP = (Number(current?.totalXP) || 0) + amount;
     const xpSettings = await this.xpConfig.get();
     const level = levelForXp(totalXP, xpSettings.levelBase, xpSettings.levelGrowth).level;
     if (current) await this.repo('player_progression').patch(current.$id, { totalXP, currentLevel: level, highestLevel: Math.max(Number(current.highestLevel) || 1, level), updatedAt: createdAt });
     else await this.repo('player_progression').insert({ userId, totalXP, currentLevel: level, highestLevel: level, equippedTitleId: '', updatedAt: createdAt });
+    invalidateUserCache(userId);
     return { awarded: true, totalXP };
   }
 
@@ -207,7 +221,17 @@ export class ProgressionRepository {
   private transactionId(value: string) { return createHash('sha256').update(value).digest('hex'); }
   private rewardKind(value: string): 'guess' | 'draw' | 'match' | 'challenge' | 'achievement' { return ['guess', 'draw', 'match', 'challenge', 'achievement'].includes(value) ? value as ReturnType<ProgressionRepository['rewardKind']> : 'match'; }
   private repo(table: Table) { return this.tables.get(table)!; }
-  private async one(table: Table, field: string, value: string) { return this.find(table, [Query.equal(field, value), Query.limit(1)]); }
+  private cachedProgression(userId: string): Promise<Row | null> {
+    return this.cache.read(`player_progression:${userId}`, () => this.one('player_progression', 'userId', userId, PROGRESSION_SELECT));
+  }
+  private activeCatalog(table: 'achievements' | 'titles' | 'challenges'): Promise<Row[]> {
+    return this.cache.readCatalog(table, () => this.list(table, [Query.equal('isActive', true), Query.limit(200)]));
+  }
+  private async one(table: Table, field: string, value: string, select?: string[]) {
+    const queries = [Query.equal(field, value), Query.limit(1)];
+    if (select) queries.push(Query.select(select));
+    return (await this.list(table, queries))[0] ?? null;
+  }
   private async find(table: Table, queries: string[]): Promise<Row | null> { return (await this.list(table, queries))[0] ?? null; }
   private async list(table: Table, queries: string[]) { return this.repo(table).list(queries); }
 }

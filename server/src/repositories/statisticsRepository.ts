@@ -1,5 +1,6 @@
 import type { AppwriteDatabase } from '../database/appwrite';
 import { RowRepository, type Row } from './rowRepository';
+import { UserReadCache, invalidateUserCache } from './userReadCache';
 
 export interface StatisticsRecord {
   userId: string;
@@ -11,17 +12,23 @@ export interface StatisticsRecord {
   winRate: number;
 }
 
+const SELECT_FIELDS = ['userId', 'totalGames', 'gamesWon', 'totalGuesses', 'correctGuesses', 'totalPoints'];
+
 export class StatisticsRepository {
   private readonly rows: RowRepository;
+  private readonly cache = new UserReadCache();
   constructor(database: AppwriteDatabase) { this.rows = new RowRepository(database, 'user_statistics'); }
 
   async get(userId: string): Promise<StatisticsRecord> {
-    const row = await this.rows.findOne('userId', userId);
-    return row ? this.fromRow(row) : { userId, totalGames: 0, gamesWon: 0, totalGuesses: 0, correctGuesses: 0, totalPoints: 0, winRate: 0 };
+    return this.cache.read(`user_statistics:${userId}`, async () => {
+      const row = await this.rows.findOne('userId', userId, SELECT_FIELDS);
+      return row ? this.fromRow(row) : { userId, totalGames: 0, gamesWon: 0, totalGuesses: 0, correctGuesses: 0, totalPoints: 0, winRate: 0 };
+    });
   }
 
   async recordMatch(userId: string, delta: Omit<StatisticsRecord, 'userId' | 'winRate'>): Promise<StatisticsRecord> {
-    const row = await this.rows.findOne('userId', userId);
+    // Write paths read fresh: the cached record may be up to 30 s old and lacks the row id.
+    const row = await this.rows.findOne('userId', userId, SELECT_FIELDS);
     const previous = row ? this.fromRow(row) : await this.get(userId);
     const next = {
       userId,
@@ -35,6 +42,7 @@ export class StatisticsRepository {
     const data = { ...next, updatedAt: now, ...(row ? {} : { createdAt: now }) };
     if (row) await this.rows.patch(row.$id, data);
     else await this.rows.insert(data);
+    invalidateUserCache(userId);
     return { ...next, winRate: next.totalGames ? Math.round((next.gamesWon / next.totalGames) * 100) : 0 };
   }
 

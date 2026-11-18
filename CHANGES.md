@@ -271,3 +271,58 @@ or token exp, whichever is first). Notes: the 3001 dev backend still runs pre-BW
 restarted; verification used ports 3003/3004. The profile-save phase still fetches
 `/api/profiles/me` + `/api/statistics/me` + `/api/progression/me` separately; BW3 merges those.
 Nothing pushed or deployed.
+
+## BW3: per-user read caches + /api/me/bootstrap (bandwidth task 3)
+
+Measured sources: `player_progression` 1.5 MB, `user_statistics` 1.3 MB, `profiles` 0.7 MB.
+`/api/progression/me` ran 9 listRows per call (dashboard), and the SPA fetched profiles/me +
+statistics/me + progression/me as three separate round trips on every sign-in and refresh.
+
+Changes:
+- New `server/src/repositories/userReadCache.ts`: in-memory read cache, 30 s TTL, max 5000
+  entries (expired-first then oldest-first eviction), single-flight per key, generation counter
+  so a write landing mid-load forces a reload instead of caching stale data. Invalidation
+  broadcasts to every live cache instance because the HTTP app and the socket handlers own
+  separate repository instances.
+- `profiles`, `user_statistics`, `player_progression` reads: `Query.equal('userId', id)` +
+  `Query.limit(1)` + `Query.select(only the fields each repository maps)`, cached per userId.
+  Write paths (profile update, recordMatch, award, equipTitle) always read fresh (cached rows
+  lack `$id` and may be 30 s old) and invalidate the user's keys after writing.
+- `ProgressionRepository.dashboard` is cached per user (30 s); the active achievements/titles/
+  challenges catalogs are cached 60 s and shared by dashboard, publicAchievements, and the
+  end-of-match unlock/challenge passes. `CatalogRepository.save/delete` now invalidates those
+  catalogs (and dashboards, which embed them). Also fixed a BW1 gap: catalog word saves/deletes
+  now call `invalidateWords()`.
+- End-of-match writes skip unchanged state: `updateChallenges` no longer inserts zero-progress
+  rows for challenges the player did not advance, and skips patches when progress is unchanged
+  (already capped at the target). Match writes still happen once per player per finished match.
+- New `GET /api/me/bootstrap` (server/src/routes/meRoutes.ts): one call returning
+  `{ profile (incl. adminRole), statistics, progression }` from the same caches. The three old
+  /me routes keep working unchanged. Frontend `toUser` now makes this single call; the separate
+  profiles/me, statistics/me and progression/me fetches are gone from the auth flow.
+- Tests: new userReadCache.test.ts (8: TTL, single-flight, per-user invalidation, mid-load write
+  race, cross-instance broadcast, catalog invalidation, eviction order, failures not cached),
+  statisticsRepository.test.ts (1), progressionCache.test.ts (3: dashboard cache, recordMatch
+  invalidation + skip-unchanged, catalog edit invalidation); profileRepository.test.ts extended
+  (select-only + cache + invalidation); httpE2e asserts the bootstrap payload and its 401.
+
+Verification: typecheck (app + server), 157 tests pass / 0 fail / 4 skipped, build. Browser
+session on the BW3 stack (vite 5175 -> backend 3005, probe-bw3.cjs): landing -> guest sign-in ->
+profile edit + save -> achievements -> challenges -> leaderboard -> profile revisit. Per-user
+API calls for the whole session: bootstrap 2 (sign-in + post-save refresh), progression/me 1
+(achievements page; challenges reuses it via the query cache), profiles/me GET 0, statistics/me
+0, profiles/me PATCH 1 (the save itself). Before BW3 the same session made 7 per-user GETs
+(2 profiles + 2 statistics + 3 progression). accountGet stays 2 (landing only), jwts 2, zero
+failed requests, zero console errors. Live socket round on 3005 PASS (probe-bw1; the first
+attempt hit a transient 401 on a freshly minted Appwrite JWT and passed on retry - verification
+failures are never cached).
+
+Estimated effect: the three tables drop from per-request reads to at most one select-only read
+per user per 30 s (plus write invalidations), and catalog scans from per-request/per-player to
+once per 60 s: >90% of the 3.5 MB over the measured window. Sign-in/refresh drops from 3 HTTP
+round trips to 1.
+
+Notes: write paths intentionally bypass the cache; a dashboard may lag an xp-config change by
+up to 30 s (catalog edits invalidate immediately). Leaderboard compute caching is BW5.
+Admin/analytics full-table reads are untouched (admin-only surfaces). New dev instances:
+backend 3005, vite 5175. Nothing pushed or deployed.

@@ -107,6 +107,15 @@ test('HTTP + Socket.IO E2E auth, profile, room lifecycle, match ownership, valid
   await tables.createRow('isolated_http_e2e', 'player_progression', 'http_e2e_progress_b', { userId: 'e2e-user-b', currentLevel: 2, totalXP: 100, highestLevel: 2, equippedTitleId: '' });
   await tables.createRow('isolated_http_e2e', 'user_statistics', 'http_e2e_stats_a', { userId: 'e2e-user-a', gamesWon: 2 });
   await tables.createRow('isolated_http_e2e', 'user_statistics', 'http_e2e_stats_b', { userId: 'e2e-user-b', gamesWon: 1 });
+  const bootstrap = await fetch(`${base}/api/me/bootstrap`, { headers: authA });
+  assert.equal(bootstrap.status, 200);
+  const bootstrapData = (await bootstrap.json()).data;
+  assert.equal(bootstrapData.profile.userId, 'e2e-user-a');
+  assert.equal(bootstrapData.profile.displayName, 'Alice E2E Updated');
+  assert.equal(bootstrapData.statistics.totalGames, 0);
+  assert.equal(bootstrapData.progression.progression.totalXP, 400);
+  assert.ok(Array.isArray(bootstrapData.progression.achievements));
+  assert.equal((await fetch(`${base}/api/me/bootstrap`)).status, 401);
   const publicLeaderboard = await fetch(`${base}/api/progression/leaderboard`);
   const publicLeaderboardRows = (await publicLeaderboard.json()).data;
   assert.equal(publicLeaderboard.status, 200); assert.equal('userId' in publicLeaderboardRows[0], false);

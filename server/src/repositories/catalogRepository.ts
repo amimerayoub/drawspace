@@ -1,6 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import { Query, type AppwriteDatabase } from '../database/appwrite';
 import { RowRepository, type Row } from './rowRepository';
+import { invalidateCatalogCaches } from './userReadCache';
+import { invalidateWords } from './wordRepository';
 
 export const CATALOGS = {
   avatars: { table: 'avatars', id: 'avatarId', search: ['name', 'category'] },
@@ -32,6 +34,7 @@ export class CatalogRepository {
       input = { ...input, word };
     }
     const row = existing ? await rows.patch(existing.$id, { ...input, [config.id]: id }) : await rows.insert({ ...input, [config.id]: id });
+    this.invalidateKind(kind);
     await this.log(actor, `catalog.${kind}.${existing ? 'update' : 'create'}`, kind, id, `${id} saved`);
     return row;
   }
@@ -47,7 +50,11 @@ export class CatalogRepository {
     for (const [table, field] of references[kind] || []) {
       if (await new RowRepository(this.db, table).findOne(field, id)) throw new Error('This item is referenced by player data; deactivate it instead of deleting.');
     }
-    await rows.delete(row.$id); await this.log(actor, `catalog.${kind}.delete`, kind, id, `${id} deleted`); return { deleted: true };
+    await rows.delete(row.$id); this.invalidateKind(kind); await this.log(actor, `catalog.${kind}.delete`, kind, id, `${id} deleted`); return { deleted: true };
+  }
+  private invalidateKind(kind: CatalogKind) {
+    if (kind === 'words') invalidateWords();
+    if (kind === 'titles' || kind === 'achievements' || kind === 'challenges') invalidateCatalogCaches();
   }
   private async log(actor: Actor, action: string, type: string, id: string, reason: string) {
     await this.audit.insert({ id: `audit_${randomUUID()}`, actorUserId: actor.userId, actorUsername: actor.username.slice(0, 32), actorRole: actor.role, action, ipAddress: '', resourceType: type, resourceId: id.slice(0, 64), status: 'success', reason: reason.slice(0, 255), createdAt: new Date().toISOString() });

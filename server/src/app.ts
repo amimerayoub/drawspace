@@ -20,6 +20,7 @@ import { authRoutes } from './routes/authRoutes';
 import { guestRoutes } from './routes/guestRoutes';
 import { preferencesRoutes } from './routes/preferencesRoutes';
 import { profileRoutes } from './routes/profileRoutes';
+import { meRoutes } from './routes/meRoutes';
 import { statisticsRoutes } from './routes/statisticsRoutes';
 import { reportRoutes } from './routes/reportRoutes';
 import { progressionRoutes } from './routes/progressionRoutes';
@@ -142,6 +143,7 @@ export function createApp(deps: ApplicationDependencies) {
   app.use('/api', rateLimit(120, 60_000));
   app.use('/api/auth', rateLimit(10, 15 * 60_000), authRoutes(verify));
   app.use('/api/profiles', profileRoutes(verify, profiles, roles));
+  app.use('/api/me', meRoutes(verify, profiles, statistics, progression, roles));
   app.use('/api/preferences', preferencesRoutes(verify, preferences));
   app.use('/api/statistics', statisticsRoutes(verify, statistics));
   app.use('/api/guest', rateLimit(5, 60 * 60_000), guestRoutes(verify, guests, profiles));

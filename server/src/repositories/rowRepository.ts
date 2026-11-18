@@ -5,10 +5,10 @@ export type Row = Record<string, unknown> & { $id: string };
 export class RowRepository {
   constructor(private readonly database: AppwriteDatabase, private readonly tableId: string) {}
 
-  async findOne(field: string, value: string): Promise<Row | null> {
-    const result = await this.database.tables.listRows(this.database.databaseId, this.tableId, [
-      Query.equal(field, value), Query.limit(1),
-    ]);
+  async findOne(field: string, value: string, select?: string[]): Promise<Row | null> {
+    const queries = [Query.equal(field, value), Query.limit(1)];
+    if (select) queries.push(Query.select(select));
+    const result = await this.database.tables.listRows(this.database.databaseId, this.tableId, queries);
     return (result.rows[0] as Row | undefined) ?? null;
   }
 

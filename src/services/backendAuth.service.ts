@@ -3,10 +3,11 @@ import type { User } from '@/types';
 import { appwriteAccount } from '@/lib/appwrite';
 import { getJwt, invalidateJwt } from '@/lib/jwtCache';
 import { apiGet, apiPost, apiPatch } from './apiClient';
-import { backendProgressionService } from './backendProgression.service';
+import type { ProgressionSnapshot } from './backendProgression.service';
 
 interface ProfileDto { userId: string; username: string; displayName: string; bio: string; avatarId: string; createdAt: string; adminRole?: string | null; }
 interface StatsDto { totalGames: number; gamesWon: number; correctGuesses: number; totalPoints: number; }
+interface BootstrapDto { profile: ProfileDto; statistics: StatsDto; progression: ProgressionSnapshot; }
 
 // Appwrite rejects a new session while one is active (e.g. a lingering guest session), so clear it first.
 async function clearActiveSession(): Promise<void> {
@@ -18,11 +19,10 @@ async function clearActiveSession(): Promise<void> {
 // account.get runs once per app start / sign-in; later refreshes reuse it until sign-out.
 let sessionAccount: { id: string; email: string | null } | null = null;
 
-async function toUser(profile: ProfileDto, email?: string): Promise<User> {
-  const [stats, progression] = await Promise.all([
-    apiGet<StatsDto>('/api/statistics/me'),
-    backendProgressionService.getMine(),
-  ]);
+// One bootstrap call replaces the old profiles/me + statistics/me + progression/me trio.
+const fetchBootstrap = () => apiGet<BootstrapDto>('/api/me/bootstrap');
+
+function toUser({ profile, statistics: stats, progression }: BootstrapDto, email?: string): User {
   const role: User['role'] = profile.adminRole === 'superadmin' ? 'superadmin'
     : profile.adminRole === 'admin' ? 'admin'
       : profile.adminRole === 'moderator' ? 'moderator'
@@ -54,8 +54,7 @@ async function currentUser(): Promise<User | null> {
       sessionAccount = { id: account.$id, email: account.email || null };
     } catch { return null; }
   }
-  const profile = await apiGet<ProfileDto>('/api/profiles/me');
-  return toUser(profile, sessionAccount.email || undefined);
+  return toUser(await fetchBootstrap(), sessionAccount.email || undefined);
 }
 
 export const backendAuthService = {
@@ -66,7 +65,7 @@ export const backendAuthService = {
     await appwriteAccount.createEmailPasswordSession(email, password);
     const account = await appwriteAccount.get();
     sessionAccount = { id: account.$id, email: account.email || null };
-    return toUser(await apiGet<ProfileDto>('/api/profiles/me'), account.email);
+    return toUser(await fetchBootstrap(), account.email);
   },
 
   async signUp(username: string, email: string, password: string): Promise<User> {
@@ -76,8 +75,7 @@ export const backendAuthService = {
     await clearActiveSession();
     await appwriteAccount.createEmailPasswordSession(account.email, password);
     sessionAccount = { id: account.$id, email: account.email || null };
-    const profile = await apiGet<ProfileDto>('/api/profiles/me');
-    return toUser(profile, account.email);
+    return toUser(await fetchBootstrap(), account.email);
   },
 
   async continueAsGuest(username: string, avatarId: string): Promise<User> {
@@ -85,9 +83,10 @@ export const backendAuthService = {
     if (name.length < 3 || name.length > 20) throw new Error('Username must be 3 to 20 characters.');
     await clearActiveSession();
     await appwriteAccount.createAnonymousSession();
-    const profile = await apiPost<ProfileDto>('/api/guest/session', { username: name, avatarId });
-    sessionAccount = { id: profile.userId, email: null };
-    return toUser(profile);
+    await apiPost<ProfileDto>('/api/guest/session', { username: name, avatarId });
+    const bootstrap = await fetchBootstrap();
+    sessionAccount = { id: bootstrap.profile.userId, email: null };
+    return toUser(bootstrap);
   },
 
   async signOut(): Promise<void> {
