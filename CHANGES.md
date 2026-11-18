@@ -603,6 +603,28 @@ resets robots to index,follow. LIVE after deploy: /en-US, /fr, /en-US/lobby -> 2
 /fonts/inter-latin-var.woff2 -> 200 font/woff2; missing /assets/*.png and *.js -> 200 shell
 (soft-404, as documented above).
 
-Status: committed (84ce3c5) and pushed fast-forward to origin/main; Cloudflare Pages
-auto-deployed and the primary /en-US fix is verified LIVE. The dead-rule cleanup + this
-correction are a follow-up local change awaiting commit/push authorization.
+Status: primary fix committed (84ce3c5) and pushed fast-forward to origin/main; Cloudflare
+Pages auto-deployed and /en-US is verified LIVE. The dead-rule cleanup + this correction are
+committed as 2f5fb35.
+
+## Sitemap + robots.txt (search-engine discovery)
+
+Added `public/sitemap.xml` and `public/robots.txt` so search engines can discover every
+public page instead of only the homepage (the earlier "site inactive" perception came from
+deep routes 404ing plus no sitemap).
+
+- sitemap.xml: 56 URLs = 7 public, indexable routes x 8 locales. Routes: landing (`/{locale}`),
+  `/play`, `/leaderboard`, `/blog`, `/rules`, `/terms`, `/privacy`. Each URL carries
+  `xhtml:link rel="alternate" hreflang` for all 8 locales (en-US, en-GB, fr, es, de, ar, pt-BR,
+  ru) plus `x-default` -> en-US, so Google maps the language variants. lastmod 2026-11-18.
+  Excluded: auth-gated (lobby, create, room, game, results, profile, achievements, challenges),
+  dynamic invite/code routes (join/:code), admin, and sign-in/sign-up. Blog article slugs are
+  dynamic (fetched from the backend) and not enumerated in this static file; the /blog index
+  is included. Regenerate with the scratch generator if routes/locales change.
+- robots.txt: `User-agent: * / Allow: / / Disallow: /admin` plus
+  `Sitemap: https://drawspace.cloud/sitemap.xml`.
+
+Verification: sitemap is well-formed (56 <url> entries, correct namespaces); both files are
+copied to dist by the build. Manual step after deploy: submit
+https://drawspace.cloud/sitemap.xml in Google Search Console and request re-indexing of the
+homepage to clear the stale "inactive" assessment.
