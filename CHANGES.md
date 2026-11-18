@@ -628,3 +628,26 @@ Verification: sitemap is well-formed (56 <url> entries, correct namespaces); bot
 copied to dist by the build. Manual step after deploy: submit
 https://drawspace.cloud/sitemap.xml in Google Search Console and request re-indexing of the
 homepage to clear the stale "inactive" assessment.
+
+## Google Tag Manager (GTM-NZTCPNLD)
+
+Added the GTM container loader to `index.html` <head>:
+`<script async src="https://www.googletagmanager.com/gtm.js?id=GTM-NZTCPNLD"></script>`.
+GTM-NZTCPNLD is a Tag Manager container (gtm.js), so the async loader is the correct
+integration. The `dataLayer`/`gtag('js', ...)` boilerplate from the request was omitted: GTM
+creates `dataLayer` itself, and those lines belong to a GA4 gtag.js property (a `G-` id), not a
+GTM container, so they would be inert here. The container script resolves (HTTP 200,
+application/javascript). No inline script was added, so no new CSP hash is required.
+
+CSP (`public/_headers`) is Report-Only. Added `https://www.googletagmanager.com` and
+`https://www.google-analytics.com` to script-src, `https://www.google-analytics.com` to img-src,
+and googletagmanager.com + google-analytics.com + `https://analytics.google.com` to connect-src
+so GTM and GA4 collection are permitted when CSP is later enforced. If the container's tags
+call other origins, allow those before enforcing.
+
+Note: the container loads on every full page load. SPA route changes do not reload gtm.js, so
+per-navigation pageview tracking depends on a History Change trigger configured inside the GTM
+container (not in this codebase).
+
+Verification: build + tsc --noEmit clean; dist/index.html contains the gtm.js script;
+dist/_headers carries the updated CSP; dist/sitemap.xml and dist/robots.txt are present.
