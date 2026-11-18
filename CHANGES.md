@@ -572,24 +572,37 @@ ALL unmatched routes. The `_redirects` `/* /index.html 200` rewrite no longer re
 
 Fix:
 - Moved `public/404.html` -> `public/errors/not-found.html` (off the top level) so Pages
-  resumes SPA mode. `_redirects` now: `/assets/* /errors/not-found.html 404` (real 404 for
-  missing assets preserved) and `/* /index.html 200` (SPA fallback).
+  resumes SPA mode. `_redirects` is now just `/* /index.html 200` (SPA fallback).
 - Error-page SEO schema: `SeoHead` gained a `noindex` prop that sets
   `<meta name="robots" content="noindex, follow">` and resets to `index, follow` on every
   other route, so it never leaks across SPA navigation. `NotFound.tsx` passes `noindex`. The
   static `errors/not-found.html` also carries `noindex, follow` plus minimal markup.
 
-Tradeoff (simplest option): unknown client routes are now soft-404 (HTTP 200 + the SPA
-NotFound page) rather than hard-404, because a static SPA host cannot know valid client
-routes server-side. `noindex, follow` tells search engines not to index them - the standard
-SPA approach. Missing /assets/* still return a real HTTP 404.
+Correction (asset 404s): the earlier `/assets/* /errors/not-found.html 404` rule was a no-op
+and has been removed. Cloudflare Pages `_redirects` supports only 301/302/303/307/308 (and 200
+rewrites); the docs list `/blog/* /blog/404.html 404` as unsupported. The original
+`/assets/* /404.html 404` rule never worked either - real asset 404s came from the top-level
+404.html forcing non-SPA mode, not from the rule. A `/assets/*` redirect would also match
+EXISTING assets (redirects run before static serving), so it cannot be used to 404 only
+missing ones.
+
+Tradeoff (simplest option): in SPA mode every unmatched path - unknown client routes AND
+missing /assets/* and /fonts/* - falls back to index.html (HTTP 200, soft-404) rather than a
+hard 404. Unknown client routes render the SPA NotFound page with `noindex, follow`, the
+standard SPA approach. Missing images/fonts return the 200 shell, fail to decode, and the
+app's onError image fallback (T2) handles them; real assets still serve correctly with their
+own content-type and immutable cache. Hard 404s for missing assets would require a Pages
+Function or a top-level 404.html plus enumerated per-route 200 rewrites - both heavier and
+fragile, so not done (simplest option per the brief).
 
 Verification: build + tsc --noEmit clean; dist has NO top-level 404.html, includes
 errors/not-found.html (noindex) and the updated _redirects; backend suite 161 pass / 0 fail /
 4 skipped; local preview + browser confirmed /en-US renders Landing (robots index,follow), an
 unknown route renders NotFound (robots noindex,follow), and client-side navigation home
-resets robots to index,follow.
+resets robots to index,follow. LIVE after deploy: /en-US, /fr, /en-US/lobby -> 200; real
+/fonts/inter-latin-var.woff2 -> 200 font/woff2; missing /assets/*.png and *.js -> 200 shell
+(soft-404, as documented above).
 
-Manual step: takes effect live only after the FRONTEND is rebuilt and redeployed to
-Cloudflare Pages (dist is gitignored; Pages builds from source). Commit + push to the branch
-Pages builds from, then trigger/await the Pages deploy. Not committed/pushed/deployed here.
+Status: committed (84ce3c5) and pushed fast-forward to origin/main; Cloudflare Pages
+auto-deployed and the primary /en-US fix is verified LIVE. The dead-rule cleanup + this
+correction are a follow-up local change awaiting commit/push authorization.
