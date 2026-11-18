@@ -127,3 +127,69 @@ family on logo/hero/section titles is the brush stack, only the three self-hoste
 are requested (zero Google Fonts traffic), no horizontal overflow at 390px, guest flow into
 the lobby still passes, zero console errors. Screenshots: desktop + mobile landing, lobby.
 Typecheck, 130 tests, and production build all pass.
+
+## T10 — Final verification and before/after metrics
+
+Gates: `npm run typecheck`, `npm run server:typecheck`, `npm test` (130 pass / 0 fail / 4 skipped),
+`npm run build` (tsc + `scripts/build.mjs` with NODE_ENV=production + 200.html copy).
+The repo has no ESLint configuration; the two tsc typechecks are the static-analysis gate.
+
+Method: controlled local A/B. BEFORE = pre-overhaul commit `049508a` extracted with `git archive`
+and built with NODE_ENV=production; AFTER = branch HEAD. Both dists served on localhost:5173 by the
+same gzip-capable static server applying each dist's own `_headers`, against the same local backend.
+Headless Chrome 1440x900. Flow: `/en-US` first load (measurement window), then SPA navigation
+leaderboard -> home -> play -> guest sign-in -> lobby -> home. Bytes = CDP `encodedDataLength`
+(gzip both legs; the Cloudflare edge uses brotli, a few percent smaller). A reference run against
+live drawspace.cloud (deploy predates this branch) is included for context.
+
+| Metric | Before (049508a) | After (HEAD) |
+| --- | --- | --- |
+| `/en-US` first load transfer | 277,984 B / 34 requests | 403,259 B / 43 requests |
+| `/account/jwts` calls in session | 8 | 2 |
+| leaderboard network GETs (4 views) | 1 (a 500 stored and replayed from browser cache, see fix below) | 1 (200; revisits served from query cache) |
+| failed API requests in session | 5 (`/api/blog` 404 x3, `/api/admin/me` 403, leaderboard 500) | 0 |
+| document security headers | none | CSP Report-Only, Permissions-Policy, nosniff, Referrer-Policy, X-Frame-Options DENY |
+
+Live reference run: 297,039 B / 36 requests, 7 jwt calls, `/api/admin/me` 403 for a guest,
+Cloudflare RUM beacon present.
+
+Why first load grew, itemized:
+- +68.5 KB brush font (the requested "pincel" feature), preloaded and immutable-cached.
+- +23.4 KB of achievement emblem WebP: the baseline landing's `Promise.all` rejected on the
+  `/api/blog` 404, so its leaders/achievements/posts sections rendered empty; after T4 the
+  landing renders real data and therefore real images.
+- +12.6 KB TanStack Query chunk (the dedupe/cache runtime).
+- Eager JS gzip: baseline single index 139.1 KB + route chunks ~146 KB; after, split eager
+  chunks ~164 KB including Query. Excluding Query the chunk-split overhead is ~5 KB.
+  T7's -43% total-JS figure and the dev-React fix are measured across all routes
+  (socket chunk is lazy and room-only); first-load eager JS is roughly flat vs a prod baseline.
+- Fonts: Google-hosted 73.5 KB + a CSS request became 143.2 KB self-hosted (three families
+  including brush), zero third-party font origins, immutable year-long cache.
+Net effect: in-session and repeat-visit traffic drops (jwt 8 -> 2, zero refetches on revisits,
+zero failed requests); first load pays for the new brush face, the now-working landing
+sections, and the query runtime.
+
+Defect found and fixed during T10: the T5 cache middleware applied `max-age` to error responses
+too. Observed consequence: a browser stored a 500 on `/api/progression/leaderboard` for 30 s and
+replayed it to later views. Any >=400 response on `/api` GETs now gets `Cache-Control: no-store`
+(writeHead guard in `server/src/app.ts`). e2e asserts 404 -> no-store and 200 -> public max-age=30;
+the platformConfig cache test now expects no-store on the unauthenticated 401. Verified live:
+404 no-store, 200 public max-age=30, stale-while-revalidate=60.
+
+Manual Cloudflare steps (consolidated from T6/T8, still pending user action):
+1. RUM beacon: keep (free analytics) or disable via Dashboard -> Analytics & Logs -> Web Analytics
+   (exact path in the T6 section). Edge-injected; cannot be removed from code.
+2. HSTS: zone -> SSL/TLS -> Edge Certificates -> enable HSTS, max-age 31536000, includeSubDomains
+   (preload optional). Not set from code so it survives any origin change.
+3. CSP: after a violation-free observation window, rename
+   `Content-Security-Policy-Report-Only` to `Content-Security-Policy` in `public/_headers`;
+   optionally drop the localhost connect-src entries and `static.cloudflareinsights.com`
+   if the beacon was disabled.
+
+Skipped / notes:
+- Profanity filter: none exists anywhere in the codebase (T9), so none was applied.
+- CSP `report-uri`: no collector endpoint exists; Report-Only plus console violation monitoring
+  was the simplest option (T8).
+- No ESLint config in the repo; typecheck serves as the lint gate.
+- Dev guest limit is 5/h per IP; restarting the dev server resets the in-memory windows.
+- Nothing was pushed or deployed: the live site remains pre-overhaul until explicitly authorized.

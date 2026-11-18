@@ -183,6 +183,14 @@ test('HTTP + Socket.IO E2E auth, profile, room lifecycle, match ownership, valid
   assert.equal(authLimitHeader, '10');
   assert.ok(Number(authRetryAfter) > 0);
 
+  // Cache hygiene: public freshness only on success; errors must never be stored.
+  const publicOk = await fetch(`${base}/api/progression/achievements`);
+  assert.equal(publicOk.status, 200);
+  assert.match(publicOk.headers.get('cache-control') ?? '', /public, max-age=30/);
+  const publicMiss = await fetch(`${base}/api/v1/public/blogs/e2e-missing-slug`);
+  assert.equal(publicMiss.status, 404);
+  assert.equal(publicMiss.headers.get('cache-control'), 'no-store');
+
   // API-wide: 120 per minute per IP, with RateLimit headers on every response.
   const firstRooms = await fetch(`${base}/api/rooms`);
   assert.ok(firstRooms.headers.get('ratelimit-remaining'));

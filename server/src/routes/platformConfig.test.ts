@@ -86,7 +86,8 @@ test('public GETs are shared-cacheable, personalized reads are not, and CORS pre
   const leaderboard = await fetch(`${base}/api/progression/leaderboard`);
   assert.equal(leaderboard.headers.get('cache-control'), 'private, max-age=30, stale-while-revalidate=60');
   const me = await fetch(`${base}/api/progression/me`);
-  assert.equal(me.headers.get('cache-control'), 'private, no-store');
+  assert.equal(me.status, 401);
+  assert.equal(me.headers.get('cache-control'), 'no-store');
 
   const preflight = await fetch(`${base}/api/progression/leaderboard`, { method: 'OPTIONS', headers: { Origin: 'https://drawspace.cloud', 'Access-Control-Request-Method': 'GET' } });
   assert.equal(preflight.headers.get('access-control-allow-origin'), 'https://drawspace.cloud');

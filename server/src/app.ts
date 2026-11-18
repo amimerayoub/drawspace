@@ -118,6 +118,12 @@ export function createApp(deps: ApplicationDependencies) {
       if (publicCache.some((pattern) => pattern.test(request.path))) response.setHeader('Cache-Control', 'public, max-age=30, stale-while-revalidate=60');
       else if (request.path === '/api/progression/leaderboard') response.setHeader('Cache-Control', 'private, max-age=30, stale-while-revalidate=60');
       else response.setHeader('Cache-Control', 'private, no-store');
+      // Explicit freshness would let browsers store 4xx/5xx bodies and replay them for 30s.
+      const writeHead = response.writeHead.bind(response) as (...args: unknown[]) => typeof response;
+      response.writeHead = ((statusCode: number, ...args: unknown[]) => {
+        if (statusCode >= 400) response.setHeader('Cache-Control', 'no-store');
+        return writeHead(statusCode, ...args);
+      }) as typeof response.writeHead;
     }
     next();
   });
