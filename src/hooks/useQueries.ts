@@ -1,8 +1,10 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiGet } from '@/services/apiClient';
+import { backendAdminService } from '@/services/backendAdmin.service';
 import { backendProgressionService } from '@/services/backendProgression.service';
 import { contentService, type BlogListQuery } from '@/services/content.service';
 import type { PlatformConfig } from '@/context/PlatformConfigContext';
+import type { AdPlacement } from '@/types';
 
 export const queryKeys = {
   leaderboard: ['leaderboard'] as const,
@@ -11,6 +13,7 @@ export const queryKeys = {
   publicAchievements: ['achievements', 'public'] as const,
   progression: (userId: string) => ['progression', userId] as const,
   platformConfig: ['platform-config'] as const,
+  ad: (placement: AdPlacement) => ['ads', placement] as const,
 };
 
 export function useLeaderboard() {
@@ -65,7 +68,13 @@ export function usePlatformConfigQuery() {
     queryKey: queryKeys.platformConfig,
     queryFn: () => apiGet<PlatformConfig>('/api/platform/config', { auth: 'none' }),
     staleTime: 5 * 60_000,
-    refetchInterval: 5 * 60_000,
-    refetchOnWindowFocus: true,
+  });
+}
+
+export function useActiveAd(placement: AdPlacement) {
+  return useQuery({
+    queryKey: queryKeys.ad(placement),
+    queryFn: () => backendAdminService.activeAd(placement),
+    staleTime: 5 * 60_000,
   });
 }

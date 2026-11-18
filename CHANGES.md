@@ -326,3 +326,34 @@ Notes: write paths intentionally bypass the cache; a dashboard may lag an xp-con
 up to 30 s (catalog edits invalidate immediately). Leaderboard compute caching is BW5.
 Admin/analytics full-table reads are untouched (admin-only surfaces). New dev instances:
 backend 3005, vite 5175. Nothing pushed or deployed.
+
+## BW4 - Frontend request hygiene (platform config polling, ad slots)
+
+Changes:
+- `usePlatformConfigQuery` (src/hooks/useQueries.ts): removed `refetchInterval: 5 min` and
+  `refetchOnWindowFocus: true`. The 5 min staleTime stays; the admin-triggered manual
+  `refresh()` in PlatformConfigContext still works via `refetch()`. The query client default
+  `refetchOnWindowFocus: false` now applies to config too.
+- `AdSlot` (src/components/AdSlot.tsx) previously fetched `/api/ads/:placement` in a bare
+  `useEffect` on every mount (landing, blog list, blog article each refetched). It now uses a
+  new `useActiveAd(placement)` TanStack query (key `['ads', placement]`, staleTime 5 min), so
+  repeat mounts and blog list <-> article navigation reuse the cached response. Errors resolve
+  to no data and render nothing, same as before.
+- Already compliant from earlier tasks, re-verified: leaderboard 60 s, blogs 5 min, public
+  achievements 5 min, progression 30 s staleTimes; shared query keys dedupe leaderboard across
+  landing/leaderboard page; no network polling timers anywhere (remaining setIntervals are
+  local UI/game ticks); no frontend caller of /api/admin/me for non-admins.
+
+Verification: typecheck (app + server), 157 tests pass / 0 fail / 4 skipped, build. Browser
+probe (probe-bw4.cjs, vite 5175 -> backend 3005): landing -> blog list -> blog article -> blog
+list -> landing revisit, then a synthetic window focus event. Whole-session counts:
+/api/platform/config 1, /api/ads/landing 1, /api/ads/blog 1, zero page errors. Before BW4 the
+same navigation fetched config on every focus/5 min timer and ads on each of the 4 mounts
+(2 landing + 2 blog).
+
+Deliberately left uncached (noted per spec): Lobby `/api/rooms` (in-memory game state served by
+the Node process, not Appwrite; room lists must be fresh) and Profile match history (players
+expect a just-finished match to appear immediately). Both are cheap Node-side reads.
+
+Estimated effect: removes the recurring config polling entirely and cuts ad fetches to one per
+placement per 5 min per browser session. Nothing pushed or deployed.

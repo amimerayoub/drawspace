@@ -1,12 +1,10 @@
-import { useEffect, useState } from 'react';
-import { backendAdminService } from '@/services/backendAdmin.service';
+import { useActiveAd } from '@/hooks/useQueries';
 import { useI18n } from '@/i18n/I18nContext';
 import type { AdPlacement } from '@/types';
 
 export function AdSlot({ placement }: { placement: AdPlacement }) {
   const { t } = useI18n();
-  const [ad, setAd] = useState<{ id: string; name: string; body: string } | null>(null);
-  useEffect(() => { let active = true; void backendAdminService.activeAd(placement).then((result) => { if (active) setAd(result); }).catch(() => { if (active) setAd(null); }); return () => { active = false; }; }, [placement]);
+  const { data: ad } = useActiveAd(placement);
   if (!ad) return null;
   return (
     <aside className="ad-slot" aria-label={t('ad.label')}>
