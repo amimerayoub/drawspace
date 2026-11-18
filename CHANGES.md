@@ -230,3 +230,44 @@ admin invalidations. Over the measured window this removes >99% of the 8.2 MB.
 Notes: the port-3001 dev backend still runs pre-BW1 code until restarted (process kill was not
 authorized in this session); verification used port 3002. Retry-after-failure also happens on the
 next call, not only on the 60 s timer. Nothing pushed or deployed.
+
+## BW2: stop per-request /v1/account calls (bandwidth task 2)
+
+Measured sources: `/v1/account` 4.4 MB (server-side `accountForJwt(jwt).get()` on every
+authenticated request, plus client `account.get()` probes) and `/v1/account/jwts` 3.9 MB.
+
+Changes:
+- `server/src/auth/verifyJwt.ts` rewritten as a cached verifier. Appwrite Cloud does not expose a
+  JWT signing secret, so local signature verification is impossible; per spec the validation
+  result is cached instead: `sha256(token) -> identity` until the token's decoded `exp`, capped at
+  10 min (default), max 5000 entries with expired-first then oldest-first eviction, single-flight
+  per token, expired tokens rejected locally with zero Appwrite calls, failures never cached.
+  Identity shape unchanged (`userId`, `name`, `email`, `emailVerified`, `isGuest`), so every route
+  and the socket handshake keep the same contract.
+- `src/services/backendAuth.service.ts`: the signed-in account (`{id, email}`) is kept in memory
+  for the session. `account.get()` now runs once at app start / sign-in instead of on every
+  session refresh; `updateProfile` drops its `account.get()` ownership probe (checks the cached
+  account locally; the server still enforces identity-scoped `/api/profiles/me`). Sign-out and
+  session switches clear it. The jwtCache/apiClient modules already met the spec (in-memory
+  `{token, exp}`, refresh under 60 s, single-flight, one 401 refresh + retry then clean sign-out,
+  never localStorage) and were left unchanged.
+- Tests: new `server/src/auth/verifyJwt.test.ts` (7 tests: cache reuse + guest identity,
+  concurrent single-flight, local expiry rejection, maxCacheMs cap + short-lived exp,
+  failures not cached, entry eviction, no-exp tokens).
+
+Verification: typecheck (app + server), 144 tests pass / 0 fail / 4 skipped, build. Live socket
+round on port 3003 (probe-bw1.cjs, PASS). Browser session against the BW2 stack (vite 5174 ->
+backend 3004, probe-bw2.cjs): landing -> guest sign-in -> profile edit + save -> achievements ->
+challenges -> leaderboard. `/v1/account` calls: 2, both during landing (React.StrictMode dev
+double-effect; production runs 1), zero afterwards including after the profile save.
+`/v1/account/jwts`: 2 total for the whole session. No failed requests, no console errors.
+
+Estimated effect: `/v1/account` drops from once per authenticated API call + socket handshake to
+at most once per token per 10 min (typically once per 15-min token lifetime) plus once per app
+start client-side: >95% of the 4.4 MB. `/v1/account/jwts` stays at the T3 level (2/session).
+
+Trade-off (spec-permitted): a revoked session stays valid until its cache entry expires (<=10 min
+or token exp, whichever is first). Notes: the 3001 dev backend still runs pre-BW2 code until
+restarted; verification used ports 3003/3004. The profile-save phase still fetches
+`/api/profiles/me` + `/api/statistics/me` + `/api/progression/me` separately; BW3 merges those.
+Nothing pushed or deployed.

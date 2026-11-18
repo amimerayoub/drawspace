@@ -11,8 +11,12 @@ interface StatsDto { totalGames: number; gamesWon: number; correctGuesses: numbe
 // Appwrite rejects a new session while one is active (e.g. a lingering guest session), so clear it first.
 async function clearActiveSession(): Promise<void> {
   invalidateJwt();
+  sessionAccount = null;
   await appwriteAccount.deleteSession('current').catch(() => undefined);
 }
+
+// account.get runs once per app start / sign-in; later refreshes reuse it until sign-out.
+let sessionAccount: { id: string; email: string | null } | null = null;
 
 async function toUser(profile: ProfileDto, email?: string): Promise<User> {
   const [stats, progression] = await Promise.all([
@@ -44,10 +48,14 @@ async function toUser(profile: ProfileDto, email?: string): Promise<User> {
 }
 
 async function currentUser(): Promise<User | null> {
-  let account;
-  try { account = await appwriteAccount.get(); } catch { return null; }
+  if (!sessionAccount) {
+    try {
+      const account = await appwriteAccount.get();
+      sessionAccount = { id: account.$id, email: account.email || null };
+    } catch { return null; }
+  }
   const profile = await apiGet<ProfileDto>('/api/profiles/me');
-  return toUser(profile, account.email || undefined);
+  return toUser(profile, sessionAccount.email || undefined);
 }
 
 export const backendAuthService = {
@@ -57,6 +65,7 @@ export const backendAuthService = {
     await clearActiveSession();
     await appwriteAccount.createEmailPasswordSession(email, password);
     const account = await appwriteAccount.get();
+    sessionAccount = { id: account.$id, email: account.email || null };
     return toUser(await apiGet<ProfileDto>('/api/profiles/me'), account.email);
   },
 
@@ -66,6 +75,7 @@ export const backendAuthService = {
     const account = await appwriteAccount.create(ID.unique(), email.trim().toLowerCase(), password, name);
     await clearActiveSession();
     await appwriteAccount.createEmailPasswordSession(account.email, password);
+    sessionAccount = { id: account.$id, email: account.email || null };
     const profile = await apiGet<ProfileDto>('/api/profiles/me');
     return toUser(profile, account.email);
   },
@@ -76,19 +86,21 @@ export const backendAuthService = {
     await clearActiveSession();
     await appwriteAccount.createAnonymousSession();
     const profile = await apiPost<ProfileDto>('/api/guest/session', { username: name, avatarId });
+    sessionAccount = { id: profile.userId, email: null };
     return toUser(profile);
   },
 
   async signOut(): Promise<void> {
     invalidateJwt();
+    sessionAccount = null;
     await appwriteAccount.deleteSession('current').catch(() => undefined);
   },
 
   getCurrentSessionUser: currentUser,
 
   async updateProfile(userId: string, patch: Partial<Pick<User, 'username' | 'bio' | 'avatarId'>>): Promise<ProfileDto> {
-    const account = await appwriteAccount.get();
-    if (account.$id !== userId) throw new Error('You can only edit your own profile.');
+    // /api/profiles/me is identity-scoped server-side; the cached account replaces the old account.get probe.
+    if (sessionAccount && sessionAccount.id !== userId) throw new Error('You can only edit your own profile.');
     return apiPatch<ProfileDto>('/api/profiles/me', patch);
   },
 
