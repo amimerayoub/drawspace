@@ -447,3 +447,115 @@ Live probe (probe-bw6.cjs on backend 3008, real Appwrite): all 8 checks pass - g
 201 through the counted Proxy, stats 401 unauthenticated, stats 403 guest, guest calls 2-5
 allowed, call 6 -> 429. The admin 200 path is covered by httpE2e with a fake database to
 avoid writing admin_roles rows to production. Nothing pushed or deployed.
+
+## BW7: before/after session measurement + bandwidth report (TASK 7)
+
+### Method
+
+Live A/B, no mocks. A counting reverse proxy (Temp/drawspace-test/counting-proxy.cjs) sat
+between each backend and Appwrite, logging every request's method, path, table, status, and
+response byte count. Two backends ran the SAME full-session probe
+(Temp/drawspace-test/probe-bw7.cjs): landing (config + ad + blog list) -> two guest sign-ins ->
+lobby rooms -> create room -> play a full 1-round match (2 turns, both guessed) -> profile +
+match history -> leaderboard.
+
+- BEFORE: commit 30cb2e3 (STEP 0 audit, pre-BW1 code) in a scratch worktree
+  (Temp/drawspace-bw7-baseline), backend port 3013.
+- AFTER: commit d891603 (BW1-BW6), backend port 3012.
+- Guest users + JWTs were minted directly to Appwrite as probe setup (outside the counted
+  window). The current backend's startup word-cache warm (5 paged reads) also falls outside
+  the window - it is a one-time cost, not per-session.
+- Two word modes were run: `custom` (words supplied in-room, no DB) and `easy` (words read
+  from custom_words). The `easy` run is the representative one because it exercises BW1.
+
+### Measured results (easy mode, full session)
+
+151 -> 83 calls (-45%); 107,080 -> 28,766 bytes (-73%). Bytes fall faster than calls because
+the removed calls were the fat ones (500-row full-metadata scans).
+
+| table | before calls | after calls | before bytes | after bytes | byte change |
+|---|---|---|---|---|---|
+| custom_words | 2 | 0 | 46186 | 0 | -100% |
+| match_history | 23 | 3 | 13067 | 2509 | -81% |
+| player_progression | 27 | 18 | 9470 | 5815 | -39% |
+| xp_transactions | 21 | 11 | 7519 | 2457 | -67% |
+| profiles | 9 | 7 | 7561 | 5559 | -26% |
+| account | 12 | 2 | 7080 | 1180 | -83% |
+| achievements | 4 | 2 | 2836 | 1418 | -50% |
+| user_statistics | 11 | 9 | 2798 | 1761 | -37% |
+| titles | 5 | 3 | 2585 | 1441 | -44% |
+| user_achievements | 8 | 7 | 2219 | 1352 | -39% |
+| platform_settings | 2 | 2 | 1384 | 1384 | 0% |
+| blog_categories | 1 | 1 | 1010 | 1010 | 0% |
+| guest_sessions | 4 | 4 | 892 | 892 | 0% |
+| blog_posts | 1 | 1 | 831 | 831 | 0% |
+| xp_config | 6 | 3 | 762 | 381 | -50% |
+| user_titles | 6 | 5 | 691 | 671 | -3% |
+| challenges | 4 | 2 | 84 | 42 | -50% |
+| user_challenges | 2 | 1 | 42 | 21 | -50% |
+| admin_roles | 2 | 1 | 42 | 21 | -50% |
+| advertisements | 1 | 1 | 21 | 21 | 0% |
+| TOTAL | 151 | 83 | 107080 | 28766 | -73% |
+
+The remaining "after" calls are legitimate once-per-player end-of-match writes
+(progression/xp/history) and first-fetch leaderboard/catalog reads - not leaks.
+
+### The idle leak (the dominant production cost)
+
+Finished rooms linger in the state store for 30 days. BEFORE, the 1 s recovery sweep
+re-persisted every finished room every tick. Measured idle traffic AFTER the session ended:
+
+- BEFORE: 83 calls / 38,743 bytes in 10 s (~8.3 calls/s, ~3.9 KB/s) - and it never stops.
+  Per finished 2-player match that is ~330 MB/day, compounding with every match and the
+  30-day retention. This is almost certainly the largest real-world sink.
+- AFTER: 0 calls / 0 bytes. Fixed in BW5 via the persistedMatches marker.
+
+### Estimated production bandwidth savings
+
+Extrapolated from the audit's measured MB (BANDWIDTH_AUDIT.md) times the per-table reductions
+above and the call-site analysis. This is an ESTIMATE - confirm against Appwrite Usage and the
+BW6 /api/admin/appwrite-stats route after deploy.
+
+| consumer | audited MB | main fix | est. reduction | est. MB saved |
+|---|---|---|---|---|
+| custom_words | 8.2 | BW1 1 h cache (per-round scan -> warm once) | ~100% | 8.2 |
+| /v1/account | 4.4 | BW2 cached verification + single account.get | ~85% | 3.7 |
+| /v1/account/jwts | 3.9 | T3/BW2 jwtCache (mint per ~14 min, not per request) | ~90% | 3.5 |
+| player_progression | 1.5 | BW3/BW5 select-only + 30 s cache + leak fix | ~70% | 1.05 |
+| user_statistics | 1.3 | BW3/BW5 cache + bootstrap + leak fix | ~70% | 0.91 |
+| profiles | 0.7 | BW3 cache + bootstrap | ~50% | 0.35 |
+| TOTAL | 20.0 | | | ~17.7 (~88%) |
+
+Point estimate ~85-90%, comfortably above the >=80% goal. The idle-leak fix alone removes a
+cost that scales with finished-match count x retention, so real-world savings are likely
+higher than this session-weighted estimate. Note: /v1/account/jwts savings come from the
+frontend jwtCache (T3); this server-side probe mints JWTs as setup, so jwts is not in the
+counted window - its reduction is reasoned from the call site, not measured here.
+
+### Skipped / left as-is (and why)
+
+- Lobby GET /api/rooms: not cached - it reflects live in-memory game state and must be fresh.
+- Profile match history (GET /api/matches/me): not cached - must show the just-finished match.
+- jwts minting: already handled by T3 jwtCache; no further change needed.
+- NO_DRAWER sweep spam: a fully-disconnected room stuck in round_end retries nextRound every
+  second. This is pure in-memory (zero Appwrite calls, confirmed by the 0-byte idle window)
+  and only cosmetic log noise. Left as-is to avoid touching round-lifecycle logic; noted here.
+- Public word listing (GET /api/v1/words): removed in BW1 per spec (it leaked the word pool).
+- Admin/MCP word reads: low frequency, admin-only; left uncached.
+
+### Manual steps
+
+1. Deploy the backend (commit d891603) and frontend to production. No migration needed - BW1-BW7
+   add no tables/columns; they only cache and count existing reads.
+2. After deploy, watch Appwrite Usage -> Bandwidth and GET /api/admin/appwrite-stats (admin only)
+   or the `[appwrite-stats]` minute log lines to confirm the per-table drop.
+3. Consolidate dev instances when convenient (ask first): 3001 old code; 3002-3005 older BW
+   stacks; orphaned 3006 (PID 26380), 3009/3010 (wrong-endpoint orphans), 3011/3013 (baseline
+   orphans, one still leaking); 3007+5177 and 3008 are usable current stacks; 3012 is the
+   measured current backend. The scratch baseline worktree Temp/drawspace-bw7-baseline and the
+   counting proxies (3108-3112) can be removed; none of this is committed.
+4. Nothing was pushed or deployed. Per-task commits are local on codex/phase1-backend-rebuild.
+
+Verification: typecheck x2, 161 tests pass / 0 fail / 4 skipped, build (unchanged from BW6 -
+BW7 adds no source code, only this report and Temp scratch probes). Both A/B sessions passed
+all 17 probe checks.
