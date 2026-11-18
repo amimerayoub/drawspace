@@ -1,5 +1,6 @@
 import { Account, Client, ID, Query, Storage, TablesDB, Users } from 'node-appwrite';
 import type { ServerConfig } from '../config/env';
+import { recordAppwriteCall } from '../monitoring/appwriteStats';
 
 export interface AppwriteDatabase {
   accountForJwt(jwt: string): Account;
@@ -10,6 +11,20 @@ export interface AppwriteDatabase {
   newId(): string;
 }
 
+// Counts every SDK call (table + method) without touching payloads or results.
+function counted<T extends object>(target: T, tableFor: (method: string, args: unknown[]) => string): T {
+  return new Proxy(target, {
+    get(obj, prop, receiver) {
+      const value = Reflect.get(obj, prop, receiver);
+      if (typeof prop !== 'string' || typeof value !== 'function') return value;
+      return (...args: unknown[]) => {
+        recordAppwriteCall(tableFor(prop, args), prop);
+        return (value as (...args: unknown[]) => unknown).apply(obj, args);
+      };
+    },
+  });
+}
+
 export function createAppwriteDatabase(config: ServerConfig): AppwriteDatabase {
   const adminClient = new Client()
     .setEndpoint(config.appwriteEndpoint)
@@ -18,11 +33,11 @@ export function createAppwriteDatabase(config: ServerConfig): AppwriteDatabase {
   return {
     accountForJwt(jwt) {
       const client = new Client().setEndpoint(config.appwriteEndpoint).setProject(config.appwriteProjectId).setJWT(jwt);
-      return new Account(client);
+      return counted(new Account(client), () => 'account');
     },
-    tables: new TablesDB(adminClient),
-    users: new Users(adminClient),
-    storage: new Storage(adminClient),
+    tables: counted(new TablesDB(adminClient), (_method, args) => (typeof args[1] === 'string' ? args[1] : '(database)')),
+    users: counted(new Users(adminClient), (method) => (method === 'createJWT' ? 'jwts' : 'users')),
+    storage: counted(new Storage(adminClient), () => 'storage'),
     databaseId: config.databaseId,
     newId: () => ID.unique(),
   };

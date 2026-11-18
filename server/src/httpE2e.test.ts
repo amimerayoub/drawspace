@@ -7,6 +7,7 @@ import { createApp } from './app';
 import type { AppwriteDatabase } from './database/appwrite';
 import type { ServerConfig } from './config/env';
 import { InMemoryMatchHistoryRepository, type MatchPlayerRecord } from './repositories/matchHistoryRepository';
+import { recordAppwriteCall } from './monitoring/appwriteStats';
 import { createSocketHandlers } from './socket/handlers';
 
 /** Isolated Appwrite TablesDB test double; every row is namespaced to this test process. */
@@ -174,6 +175,17 @@ test('HTTP + Socket.IO E2E auth, profile, room lifecycle, match ownership, valid
   assert.equal(adminMatches.status, 200); assert.equal((await adminMatches.json()).data.length, 1);
   const publicHistory = await fetch(`${base}/api/matches/player/AliceE2E`);
   assert.equal(publicHistory.status, 200); assert.equal('playerId' in (await publicHistory.json()).data[0], false);
+
+  // BW6: Appwrite stats are admin-only.
+  assert.equal((await fetch(`${base}/api/admin/appwrite-stats`)).status, 401);
+  assert.equal((await fetch(`${base}/api/admin/appwrite-stats`, { headers: authA })).status, 403);
+  recordAppwriteCall('profiles', 'listRows');
+  const statsResponse = await fetch(`${base}/api/admin/appwrite-stats`, { headers: adminAuth });
+  assert.equal(statsResponse.status, 200);
+  const stats = (await statsResponse.json()).data;
+  assert.ok(Array.isArray(stats.totals));
+  assert.ok(stats.totals.some((entry: { table: string; calls: number }) => entry.table === 'profiles' && entry.calls >= 1));
+  assert.ok(Array.isArray(stats.minutes));
 
   const connect = (token: string) => new Promise<Socket>((resolve, reject) => {
     const socket = createSocketClient(base, { auth: { jwt: token }, transports: ['websocket'], reconnection: false }); sockets.push(socket);

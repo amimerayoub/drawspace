@@ -46,6 +46,7 @@ import { InMemoryRoomStateStore, type RoomStateStore } from './state/roomStateSt
 import { AppwriteMatchHistoryRepository, type MatchHistoryRepository } from './repositories/matchHistoryRepository';
 import { matchRoutes } from './routes/matchRoutes';
 import { overviewRoutes } from './routes/overviewRoutes';
+import { appwriteStatsRoutes } from './routes/appwriteStatsRoutes';
 import { RoomAdminService } from './game/roomAdmin';
 import { roomAdminRoutes } from './routes/roomAdminRoutes';
 import { AnalyticsRepository } from './repositories/analyticsRepository';
@@ -153,6 +154,7 @@ export function createApp(deps: ApplicationDependencies) {
   app.use('/api/guest', rateLimit(5, 60 * 60_000), guestRoutes(verify, guests, profiles));
   app.use('/api/admin', rateLimit(60, 60_000), adminRoutes(verify, roles, reports, adminUsers));
   app.use('/api/admin/overview', overviewRoutes(verify, roles, { database: deps.database, game, matchHistory }));
+  app.use('/api/admin/appwrite-stats', appwriteStatsRoutes(verify, roles));
   app.use('/api/admin/analytics', analyticsRoutes(verify, roles, analytics));
   app.use('/api/admin/rooms', roomAdminRoutes(verify, roles, roomAdmin));
   app.use('/api/reports', rateLimit(20, 60_000), reportRoutes(verify, reports, game));

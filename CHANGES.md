@@ -416,3 +416,34 @@ Notes: the first BW5 dev instance (3006) was started without the 5176 origin and
 was stopped but the node process survived (port kept); killing it was blocked, so the verified
 BW5 stack runs on 3007 + 5177. 3006 is idle and can be closed during instance consolidation.
 Nothing pushed or deployed.
+
+## BW6: Appwrite call counter + admin-only stats (TASK 6)
+
+Goal: make Appwrite usage observable without adding infrastructure, and confirm the guest
+abuse guard from T9.
+
+- In-memory counter (server/src/monitoring/appwriteStats.ts): a module singleton counts
+  every Appwrite SDK call grouped by table and method, in per-minute buckets (rolling
+  60-minute window) plus lifetime totals. No request bodies, tokens, or keys are stored -
+  only table name, method name, and counts. Memory is bounded (60 minutes x tables x methods).
+- Counting wrapper (server/src/database/appwrite.ts): a `counted()` Proxy wraps the TablesDB,
+  Users, Account, and Storage SDK objects. Tables are labeled by tableId argument;
+  users.createJWT is labeled `jwts`, account calls `account`, storage calls `storage`.
+  The Proxy only observes - arguments and results pass through unchanged (verified against
+  a local fake Appwrite HTTP server in appwriteStats.test.ts).
+- Admin route: GET /api/admin/appwrite-stats behind requireAuth + requireAdmin (same guard
+  as the rest of /api/admin). Returns totals + per-minute breakdown, sorted by call count.
+  Unauthenticated -> 401, authenticated non-admin -> 403.
+- Minute logger (started from server/src/index.ts): an unref'd 60 s interval logs one line
+  per minute with activity, e.g. `[appwrite-stats] <minute> custom_words=4 profiles=2`.
+  Idle minutes log nothing. No secrets in the output.
+- Guest-session rate limit: already implemented in T9 (`/api/guest` -> 5 requests/hour/IP,
+  server/src/app.ts). Re-verified live below; no code change needed.
+
+Verification: typecheck x2, 161 tests pass / 0 fail / 4 skipped, build. New tests:
+appwriteStats.test.ts (bucket grouping, reset, Proxy pass-through against a fake server);
+httpE2e asserts 401 unauthenticated, 403 guest, and 200 + totals/minutes shape for admin.
+Live probe (probe-bw6.cjs on backend 3008, real Appwrite): all 8 checks pass - guest session
+201 through the counted Proxy, stats 401 unauthenticated, stats 403 guest, guest calls 2-5
+allowed, call 6 -> 429. The admin 200 path is covered by httpE2e with a fake database to
+avoid writing admin_roles rows to production. Nothing pushed or deployed.

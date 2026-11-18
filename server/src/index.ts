@@ -8,6 +8,7 @@ import { createClient } from 'redis';
 import Redis from 'ioredis';
 import { createAdapter } from '@socket.io/redis-adapter';
 import { InMemoryRoomStateStore, RedisRoomStateStore, type RedisRoomClient } from './state/roomStateStore';
+import { startAppwriteStatsLogger } from './monitoring/appwriteStats';
 
 async function main() {
   const config = loadConfig();
@@ -33,6 +34,7 @@ async function main() {
     httpServer.listen(config.port, '0.0.0.0', resolve);
   });
   console.info(`[server] listening on port ${config.port}`);
+  startAppwriteStatsLogger();
 
   const shutdown = () => {
     io.close();
