@@ -5,13 +5,15 @@ export interface PlatformConfig {
   siteName: string; tagline: string; contactEmail: string; defaultLocale: string;
   maintenance: boolean; registrationOpen: boolean; guestPlay: boolean;
   logoUrl: string; faviconUrl: string; announcement: string; seoTitle: string; seoDescription: string;
+  gaMeasurementId: string; gtmContainerId: string;
   updatedAt: string | null;
 }
 
 const DEFAULT_CONFIG: PlatformConfig = {
   siteName: 'DrawSpace', tagline: '', contactEmail: 'hello@drawspace.cloud', defaultLocale: 'en',
   maintenance: false, registrationOpen: true, guestPlay: true,
-  logoUrl: '', faviconUrl: '', announcement: '', seoTitle: '', seoDescription: '', updatedAt: null,
+  logoUrl: '', faviconUrl: '', announcement: '', seoTitle: '', seoDescription: '',
+  gaMeasurementId: '', gtmContainerId: '', updatedAt: null,
 };
 
 interface PlatformConfigValue { config: PlatformConfig; ready: boolean; refresh: () => void }

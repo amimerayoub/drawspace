@@ -50,7 +50,7 @@ export const backendAdminService = {
   ads: () => apiGet<AdUnit[]>('/api/admin/content/ads'),
   saveAd: (ad: AdUnit) => apiPut<AdUnit>(`/api/admin/content/ads/${encodeURIComponent(ad.id)}`, { name: ad.name, placement: ad.placement, enabled: ad.enabled, startDate: ad.startDate, endDate: ad.endDate, priority: ad.priority, body: ad.body }),
   deleteAd: (id: string) => apiDelete<{ deleted: boolean }>(`/api/admin/content/ads/${encodeURIComponent(id)}`),
-  settings: () => apiGet<Pick<SystemSettings, 'siteName' | 'tagline' | 'contactEmail' | 'defaultLocale' | 'maintenance' | 'registrationOpen' | 'guestPlay'>>('/api/admin/content/settings'),
-  saveSettings: (settings: Pick<SystemSettings, 'siteName' | 'tagline' | 'contactEmail' | 'defaultLocale' | 'maintenance' | 'registrationOpen' | 'guestPlay'>) => apiPut('/api/admin/content/settings', settings),
+  settings: () => apiGet<Pick<SystemSettings, 'siteName' | 'tagline' | 'contactEmail' | 'defaultLocale' | 'maintenance' | 'registrationOpen' | 'guestPlay' | 'gaMeasurementId' | 'gtmContainerId'>>('/api/admin/content/settings'),
+  saveSettings: (settings: Pick<SystemSettings, 'siteName' | 'tagline' | 'contactEmail' | 'defaultLocale' | 'maintenance' | 'registrationOpen' | 'guestPlay' | 'gaMeasurementId' | 'gtmContainerId'>) => apiPut('/api/admin/content/settings', { siteName: settings.siteName, tagline: settings.tagline, contactEmail: settings.contactEmail, defaultLocale: settings.defaultLocale, maintenance: settings.maintenance, registrationOpen: settings.registrationOpen, guestPlay: settings.guestPlay, gaMeasurementId: settings.gaMeasurementId, gtmContainerId: settings.gtmContainerId }),
   audit: () => apiGet<AuditEntry[]>('/api/admin/content/audit'),
 };

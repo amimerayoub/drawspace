@@ -6,6 +6,7 @@ import { useAuth } from '@/context/AuthContext';
 import { usePlatformConfig } from '@/context/PlatformConfigContext';
 import { Header } from '@/components/Header';
 import { Footer } from '@/components/Footer';
+import { AnalyticsTags } from '@/components/AnalyticsTags';
 import { Spinner } from '@/components/ui';
 const Landing = lazy(() => import('@/routes/Landing'));
 const Play = lazy(() => import('@/routes/Play'));
@@ -125,6 +126,8 @@ const siteRoutes = (
 
 export default function App() {
   return (
+    <>
+    <AnalyticsTags />
     <Suspense fallback={<div className="page"><Spinner /></div>}>
     <Routes>
       <Route path="/" element={<Navigate to={`/${DEFAULT_LOCALE}`} replace />} />
@@ -149,5 +152,6 @@ export default function App() {
       <Route path="*" element={<Navigate to={`/${DEFAULT_LOCALE}`} replace />} />
     </Routes>
     </Suspense>
+    </>
   );
 }

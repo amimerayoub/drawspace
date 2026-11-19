@@ -47,6 +47,8 @@ test('public platform config is public-safe, reflects admin updates, and invalid
   assert.equal(initialData.siteName, 'DrawSpace');
   assert.equal(initialData.registrationOpen, true);
   assert.equal(initialData.maintenance, false);
+  assert.equal(initialData.gaMeasurementId, '');
+  assert.equal(initialData.gtmContainerId, '');
   assert.equal('updatedBy' in initialData, false);
   assert.equal('maxRoomCapacity' in initialData, false);
   assert.equal('passwordHash' in initialData, false);
@@ -56,7 +58,7 @@ test('public platform config is public-safe, reflects admin updates, and invalid
   assert.equal(denied.status, 403);
 
   // Admin update is persisted and immediately visible through the public endpoint (cache invalidated).
-  const updated = await fetch(`${base}/api/admin/content/settings`, { method: 'PUT', headers: { Authorization: 'Bearer cfg-admin', 'Content-Type': 'application/json' }, body: JSON.stringify({ siteName: 'My DrawSpace', tagline: 'Draw and guess', contactEmail: 'support@example.invalid', defaultLocale: 'en', maintenance: true, registrationOpen: false, guestPlay: true }) });
+  const updated = await fetch(`${base}/api/admin/content/settings`, { method: 'PUT', headers: { Authorization: 'Bearer cfg-admin', 'Content-Type': 'application/json' }, body: JSON.stringify({ siteName: 'My DrawSpace', tagline: 'Draw and guess', contactEmail: 'support@example.invalid', defaultLocale: 'en', maintenance: true, registrationOpen: false, guestPlay: true, gaMeasurementId: 'G-ABC1234567', gtmContainerId: 'GTM-XYZ9876' }) });
   assert.equal(updated.status, 200);
   const after = await fetch(`${base}/api/platform/config`);
   const afterData = (await after.json()).data;
@@ -65,6 +67,12 @@ test('public platform config is public-safe, reflects admin updates, and invalid
   assert.equal(afterData.maintenance, true);
   assert.equal(afterData.registrationOpen, false);
   assert.equal(afterData.contactEmail, 'support@example.invalid');
+  assert.equal(afterData.gaMeasurementId, 'G-ABC1234567');
+  assert.equal(afterData.gtmContainerId, 'GTM-XYZ9876');
+
+  // Malformed analytics IDs are rejected so they cannot be injected into a script URL.
+  const bad = await fetch(`${base}/api/admin/content/settings`, { method: 'PUT', headers: { Authorization: 'Bearer cfg-admin', 'Content-Type': 'application/json' }, body: JSON.stringify({ siteName: 'My DrawSpace', tagline: '', contactEmail: 'support@example.invalid', defaultLocale: 'en', maintenance: false, registrationOpen: true, guestPlay: true, gaMeasurementId: 'G-"><script>', gtmContainerId: '' }) });
+  assert.equal(bad.status, 400);
 });
 
 test('public GETs are shared-cacheable, personalized reads are not, and CORS preflight is cached', async (t) => {

@@ -9,6 +9,7 @@ export interface PublicPlatformConfig {
   siteName: string; tagline: string; contactEmail: string; defaultLocale: string;
   maintenance: boolean; registrationOpen: boolean; guestPlay: boolean;
   logoUrl: string; faviconUrl: string; announcement: string; seoTitle: string; seoDescription: string;
+  gaMeasurementId: string; gtmContainerId: string;
   updatedAt: string | null;
 }
 export class AdminDataRepository {
@@ -79,7 +80,7 @@ export class AdminDataRepository {
   async getSettings() {
     const row = (await this.settings.list([Query.limit(1)]))[0];
     if (!row) return null;
-    return { siteName: String(row.platformName), tagline: String(row.platformDescription), contactEmail: String(row.publicSupportEmail), defaultLocale: String(row.defaultLanguage), maintenance: Boolean(row.maintenanceMode), registrationOpen: Boolean(row.registrationEnabled), guestPlay: Boolean(row.guestAccessEnabled), maxRoomCapacity: Number(row.maxRoomCapacity), allowCustomWords: Boolean(row.allowCustomWords) };
+    return { siteName: String(row.platformName), tagline: String(row.platformDescription), contactEmail: String(row.publicSupportEmail), defaultLocale: String(row.defaultLanguage), maintenance: Boolean(row.maintenanceMode), registrationOpen: Boolean(row.registrationEnabled), guestPlay: Boolean(row.guestAccessEnabled), gaMeasurementId: String(row.gaMeasurementId || ''), gtmContainerId: String(row.gtmContainerId || ''), maxRoomCapacity: Number(row.maxRoomCapacity), allowCustomWords: Boolean(row.allowCustomWords) };
   }
   async getPublicConfig(): Promise<PublicPlatformConfig> {
     if (this.publicConfigCache && Date.now() - this.publicConfigCache.at < 30_000) return this.publicConfigCache.value;
@@ -97,14 +98,16 @@ export class AdminDataRepository {
       announcement: String(row?.announcement || ''),
       seoTitle: String(row?.seoTitle || ''),
       seoDescription: String(row?.seoDescription || ''),
+      gaMeasurementId: String(row?.gaMeasurementId || ''),
+      gtmContainerId: String(row?.gtmContainerId || ''),
       updatedAt: row?.updatedAt ? String(row.updatedAt) : null,
     };
     this.publicConfigCache = { value, at: Date.now() };
     return value;
   }
-  async updateSettings(input: { siteName: string; tagline: string; contactEmail: string; defaultLocale: string; maintenance: boolean; registrationOpen: boolean; guestPlay: boolean }, actor: Actor) {
+  async updateSettings(input: { siteName: string; tagline: string; contactEmail: string; defaultLocale: string; maintenance: boolean; registrationOpen: boolean; guestPlay: boolean; gaMeasurementId: string; gtmContainerId: string }, actor: Actor) {
     const row = (await this.settings.list([Query.limit(1)]))[0];
-    const data = { platformName: input.siteName, platformDescription: input.tagline, publicSupportEmail: input.contactEmail, defaultLanguage: input.defaultLocale, maintenanceMode: input.maintenance, registrationEnabled: input.registrationOpen, guestAccessEnabled: input.guestPlay, updatedAt: new Date().toISOString(), updatedBy: actor.userId };
+    const data = { platformName: input.siteName, platformDescription: input.tagline, publicSupportEmail: input.contactEmail, defaultLanguage: input.defaultLocale, maintenanceMode: input.maintenance, registrationEnabled: input.registrationOpen, guestAccessEnabled: input.guestPlay, gaMeasurementId: input.gaMeasurementId, gtmContainerId: input.gtmContainerId, updatedAt: new Date().toISOString(), updatedBy: actor.userId };
     if (row) await this.settings.patch(row.$id, data); else await this.settings.insert({ ...data, maxRoomCapacity: 12, guessRateLimitPerMinute: 30, chatRateLimitPerMinute: 30, emailVerificationRequired: false, allowCustomWords: true });
     this.publicConfigCache = null;
     await this.writeAudit(actor, 'platform_settings.update', 'platform_settings', 'singleton', 'updated');

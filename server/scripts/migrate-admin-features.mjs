@@ -117,6 +117,8 @@ const platformSettingsAdds = [
   { key: 'announcement', type: 'string', size: 500, default: '' },
   { key: 'seoTitle', type: 'string', size: 70, default: '' },
   { key: 'seoDescription', type: 'string', size: 170, default: '' },
+  { key: 'gaMeasurementId', type: 'string', size: 32, default: '' },
+  { key: 'gtmContainerId', type: 'string', size: 32, default: '' },
 ];
 
 const createColumn = async (tableId, col) => {

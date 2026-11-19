@@ -341,6 +341,8 @@ export interface SystemSettings {
   guestPlay: boolean;
   defaultLocale: Locale;
   contactEmail: string;
+  gaMeasurementId: string;
+  gtmContainerId: string;
 }
 
 export interface PermissionDef {

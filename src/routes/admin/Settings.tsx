@@ -9,13 +9,15 @@ import { AdminPage, FieldRow } from './shared';
 
 export default function Settings() {
   const { toast } = useToast();
-  const [form, setForm] = useState<SystemSettings>({ siteName: '', tagline: '', maintenance: false, registrationOpen: false, guestPlay: false, defaultLocale: 'en-US', contactEmail: '' });
+  const [form, setForm] = useState<SystemSettings>({ siteName: '', tagline: '', maintenance: false, registrationOpen: false, guestPlay: false, defaultLocale: 'en-US', contactEmail: '', gaMeasurementId: '', gtmContainerId: '' });
   const [error, setError] = useState('');
   useEffect(() => { void backendAdminService.settings().then((settings) => { if (settings) setForm(settings); }).catch((e: unknown) => setError(e instanceof Error ? e.message : 'Platform settings could not be loaded.')); }, []);
 
   const save = async () => {
     if (!form.siteName.trim()) { toast('Site name cannot be empty.', 'error'); return; }
     if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(form.contactEmail)) { toast('Enter a valid contact email.', 'error'); return; }
+    if (form.gaMeasurementId.trim() && !/^G-[A-Z0-9]{4,20}$/i.test(form.gaMeasurementId.trim())) { toast('GA4 ID must look like G-XXXXXXXXXX.', 'error'); return; }
+    if (form.gtmContainerId.trim() && !/^GTM-[A-Z0-9]{4,20}$/i.test(form.gtmContainerId.trim())) { toast('GTM ID must look like GTM-XXXXXXX.', 'error'); return; }
     try { await backendAdminService.saveSettings(form); toast('Platform settings saved.', 'success'); setError(''); }
     catch (e) { toast(e instanceof Error ? e.message : 'Platform settings could not be saved.', 'error'); }
   };
@@ -60,6 +62,19 @@ export default function Settings() {
             <p className="muted">Reset is disabled in the connected production admin. It only applied to local mock data.</p>
             <Button variant="danger" icon={<Save size={15} />} disabled>Reset demo data unavailable</Button>
           </div>
+        </div>
+      </div>
+
+      <div className="panel panel-pad">
+        <h2 className="admin-panel-title">Analytics</h2>
+        <p className="muted">The public site loads these tags automatically. Leave a field empty to use the built-in default. Changes take effect on the next full page load.</p>
+        <div className="admin-grid-2">
+          <FieldRow label="GA4 Measurement ID" hint="Format G-XXXXXXXXXX. Default G-C6NH86LXQY.">
+            <Input value={form.gaMeasurementId} onChange={(e) => setForm({ ...form, gaMeasurementId: e.target.value })} placeholder="G-C6NH86LXQY" maxLength={32} />
+          </FieldRow>
+          <FieldRow label="GTM Container ID" hint="Format GTM-XXXXXXX. Default GTM-NZTCPNLD.">
+            <Input value={form.gtmContainerId} onChange={(e) => setForm({ ...form, gtmContainerId: e.target.value })} placeholder="GTM-NZTCPNLD" maxLength={32} />
+          </FieldRow>
         </div>
       </div>
 

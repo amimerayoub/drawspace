@@ -681,3 +681,58 @@ Verification: build + tsc --noEmit clean; gtag/js?id=G-C6NH86LXQY resolves (200)
 Note: like GTM, gtag.js loads on full page loads; SPA route-change pageviews need either a
 History Change trigger (GTM) or a router-driven `gtag('event','page_view')` on navigation. The
 GA4 stream's Enhanced Measurement covers scrolls/outbound clicks once data flows.
+
+## Admin-configurable analytics IDs (GA4 + GTM)
+
+The GA4 Measurement ID and GTM Container ID are now editable in **Admin → System settings →
+Analytics** instead of being hardcoded in `index.html`. The public site reads them from the
+platform config and injects the tags at runtime, so IDs can change without a code deploy.
+
+Backend (`server/src`):
+- `repositories/adminDataRepository.ts`: `gaMeasurementId` / `gtmContainerId` added to
+  `PublicPlatformConfig`, `getSettings()`, `getPublicConfig()` (read tolerate missing columns,
+  returning `''`), and the `updateSettings()` patch.
+- `routes/contentRoutes.ts`: `settingsSchema` accepts both fields, trimmed, max 32, validated
+  against `^(G-[A-Z0-9]{4,20})?$` / `^(GTM-[A-Z0-9]{4,20})?$` (empty allowed). The format guard
+  matters because the value is interpolated into a script `src` URL; malformed input is rejected
+  with 400 so it cannot break out of the URL.
+
+Frontend (`src`):
+- `types/index.ts` `SystemSettings`, `data/mock.ts` `SYSTEM_SETTINGS`, and
+  `context/PlatformConfigContext.tsx` carry the two fields.
+- `services/backendAdmin.service.ts`: `settings()`/`saveSettings()` include the fields.
+  `saveSettings` now sends an explicit payload of exactly the schema keys, so stray fields the
+  GET returns (`maxRoomCapacity`, `allowCustomWords`) no longer trip the strict server schema.
+- `routes/admin/Settings.tsx`: new Analytics panel with both ID inputs, format hints, and
+  client-side validation matching the server.
+- `components/AnalyticsTags.tsx` (new): once the public config resolves, injects `gtm.js` and
+  `gtag/js` once per document and runs the `dataLayer`/`gtag('js')`/`gtag('config')` bootstrap
+  from app code (CSP `'self'`, no inline script). Wired into `App` inside `PlatformConfigProvider`.
+- `index.html`: the hardcoded GTM + GA4 + inline gtag scripts were removed (the loader replaces
+  them). `public/_headers`: the inline gtag CSP hash was dropped; the theme-bootstrap hash and
+  the google origins remain.
+
+Simplest-option notes: an empty field falls back to the built-in default (`G-C6NH86LXQY` /
+`GTM-NZTCPNLD`), so collection never silently stops and there is no "disable" state via empty.
+Tags are injected once per full page load; an admin change applies on the next page load (the
+public config also has a 30 s server cache). SPA route-change pageviews are unchanged from the
+GA4 note above.
+
+Schema: two additive optional string columns on `platform_settings` (`gaMeasurementId`,
+`gtmContainerId`, size 32, default `''`) were added to `server/scripts/migrate-admin-features.mjs`.
+**Not yet applied to production** — production schema changes require approval. Until applied,
+reads return `''` (defaults used) but an admin save of these fields would fail because the
+columns do not exist.
+
+Deployment order: apply the two columns, deploy the backend to Railway, THEN push the frontend.
+The backend must accept the new fields before the frontend sends them (strict `settingsSchema`).
+
+Verification: `tsc --noEmit` (frontend + server) clean; full suite 161 pass / 0 fail / 4 skipped
+(includes new assertions: public config exposes the IDs, admin update propagates, malformed ID
+rejected 400); production build clean. In-browser against the built dist + a local backend reading
+production Appwrite: with empty config the loader injected `gtm.js?id=GTM-NZTCPNLD` and
+`gtag/js?id=G-C6NH86LXQY` and a real collect hit fired (`tid=G-C6NH86LXQY`, `en=page_view`); with a
+mocked config carrying custom IDs it injected `GTM-TEST999` / `G-TEST123456` and configured
+`G-TEST123456`, proving the IDs come from config. The admin Analytics panel was verified via
+typecheck + the built Settings bundle (labels and field bindings present); an authenticated
+click-through was not performed.

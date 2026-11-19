@@ -292,6 +292,7 @@ export const XP_CONFIG: XpConfig = {
 export const SYSTEM_SETTINGS: SystemSettings = {
   siteName: 'DrawSpace', tagline: 'Draw, guess, learn English.', maintenance: false,
   registrationOpen: true, guestPlay: true, defaultLocale: 'en-US', contactEmail: 'hello@drawspace.cloud',
+  gaMeasurementId: 'G-C6NH86LXQY', gtmContainerId: 'GTM-NZTCPNLD',
 };
 
 export const PERMISSIONS: PermissionDef[] = [
