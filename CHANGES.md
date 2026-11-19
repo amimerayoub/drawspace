@@ -651,3 +651,33 @@ container (not in this codebase).
 
 Verification: build + tsc --noEmit clean; dist/index.html contains the gtm.js script;
 dist/_headers carries the updated CSP; dist/sitemap.xml and dist/robots.txt are present.
+
+## GA4 data collection fix (G-C6NH86LXQY)
+
+Problem: the Analytics web stream (Measurement Id G-C6NH86LXQY) reported "Data collection
+isn't active" / "No data received" / "0 connected" site tags. Cause: only the GTM container
+GTM-NZTCPNLD was loaded, and that container has no GA4 tag configured inside it, so nothing
+sent hits to the GA4 property. Loading gtm.js alone does not install the GA4 Google tag.
+
+Fix: added the direct GA4 gtag.js tag to `index.html` <head> for G-C6NH86LXQY:
+`<script async src="https://www.googletagmanager.com/gtag/js?id=G-C6NH86LXQY"></script>` plus
+the inline `dataLayer`/`gtag('js')`/`gtag('config', 'G-C6NH86LXQY')` bootstrap. This is the
+"Google tag" the GA4 stream instructions ask for, and it activates collection immediately
+without needing GTM UI configuration. The inline config script's CSP hash
+(`sha256-1kHMIQjagQ8sOu7WlfW0ho6fer6lYHJ644FFk/KjKDQ=`, computed from the built dist) was added
+to script-src so it is allowed when CSP is enforced. googletagmanager.com / google-analytics.com
+were already allowed from the GTM change.
+
+GTM vs GA4: both loaders are present. The GTM container is currently empty, so the direct gtag
+tag is what sends data. To avoid double-counting later, manage GA4 in ONE place: either keep
+this direct tag, or configure a GA4 tag inside GTM for G-C6NH86LXQY and remove the direct tag.
+The empty 551 KB gtm.js container can be removed if GTM is not used (bandwidth).
+
+Verification: build + tsc --noEmit clean; gtag/js?id=G-C6NH86LXQY resolves (200). In-browser
+(local preview): `window.gtag` defined, dataLayer carries js/config/gtm.dom/gtm.load, cookies
+`_ga` and `_ga_C6NH86LXQY` set, and a real collection request fired:
+`https://www.google-analytics.com/g/collect?v=2&tid=G-C6NH86LXQY...`. Data collection is active.
+
+Note: like GTM, gtag.js loads on full page loads; SPA route-change pageviews need either a
+History Change trigger (GTM) or a router-driven `gtag('event','page_view')` on navigation. The
+GA4 stream's Enhanced Measurement covers scrolls/outbound clicks once data flows.
