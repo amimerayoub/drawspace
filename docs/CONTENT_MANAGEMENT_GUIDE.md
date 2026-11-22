@@ -34,6 +34,8 @@ The blog page lists every article with search, status/category filters, sorting,
 
 Public blog endpoints (`/api/v1/public/blogs`, `/api/v1/public/blogs/:slug`) return only published, safe fields. Drafts, archived, and future-scheduled articles are never exposed publicly.
 
+For visual editing, every article can also be opened in the Blog Studio (`/admin/blog/studio/<id>`, or the wand icon on a row). The Studio stores blocks instead of markdown in the same `content` column. See `BLOG_STUDIO_GUIDE.md`.
+
 ## Word bank management (`/admin/words`)
 
 The word bank page lists words with search and category/difficulty/status filters.
@@ -87,6 +89,7 @@ If the page reports that the `mcp_api_keys` table is unavailable, apply the cont
 
 ## Related documents
 
+- `BLOG_STUDIO_GUIDE.md` - block editor, design presets, custom code, storage limits.
 - `IMPORT_EXPORT_GUIDE.md` - import/export formats, strategies, limits, recovery.
 - `DRAWSPACE_API.md` - public and admin REST API reference.
 - `MCP_SETUP.md` - run the MCP server, manage keys, connect a client.

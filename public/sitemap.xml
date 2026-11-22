@@ -840,4 +840,34 @@
     <changefreq>monthly</changefreq>
     <priority>0.3</priority>
   </url>
+  <url>
+    <loc>https://drawspace.cloud/en-US/blog/tips-to-guess-faster-in-drawing-games</loc>
+    <xhtml:link rel="alternate" hreflang="en-US" href="https://drawspace.cloud/en-US/blog/tips-to-guess-faster-in-drawing-games"/>
+    <xhtml:link rel="alternate" hreflang="en-GB" href="https://drawspace.cloud/en-GB/blog/tips-to-guess-faster-in-drawing-games"/>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://drawspace.cloud/fr/blog/tips-to-guess-faster-in-drawing-games"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://drawspace.cloud/es/blog/tips-to-guess-faster-in-drawing-games"/>
+    <xhtml:link rel="alternate" hreflang="de" href="https://drawspace.cloud/de/blog/tips-to-guess-faster-in-drawing-games"/>
+    <xhtml:link rel="alternate" hreflang="ar" href="https://drawspace.cloud/ar/blog/tips-to-guess-faster-in-drawing-games"/>
+    <xhtml:link rel="alternate" hreflang="pt-BR" href="https://drawspace.cloud/pt-BR/blog/tips-to-guess-faster-in-drawing-games"/>
+    <xhtml:link rel="alternate" hreflang="ru" href="https://drawspace.cloud/ru/blog/tips-to-guess-faster-in-drawing-games"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://drawspace.cloud/en-US/blog/tips-to-guess-faster-in-drawing-games"/>
+    <lastmod>2026-11-22</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://drawspace.cloud/en-US/blog/welcome-to-drawspace-2</loc>
+    <xhtml:link rel="alternate" hreflang="en-US" href="https://drawspace.cloud/en-US/blog/welcome-to-drawspace-2"/>
+    <xhtml:link rel="alternate" hreflang="en-GB" href="https://drawspace.cloud/en-GB/blog/welcome-to-drawspace-2"/>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://drawspace.cloud/fr/blog/welcome-to-drawspace-2"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://drawspace.cloud/es/blog/welcome-to-drawspace-2"/>
+    <xhtml:link rel="alternate" hreflang="de" href="https://drawspace.cloud/de/blog/welcome-to-drawspace-2"/>
+    <xhtml:link rel="alternate" hreflang="ar" href="https://drawspace.cloud/ar/blog/welcome-to-drawspace-2"/>
+    <xhtml:link rel="alternate" hreflang="pt-BR" href="https://drawspace.cloud/pt-BR/blog/welcome-to-drawspace-2"/>
+    <xhtml:link rel="alternate" hreflang="ru" href="https://drawspace.cloud/ru/blog/welcome-to-drawspace-2"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://drawspace.cloud/en-US/blog/welcome-to-drawspace-2"/>
+    <lastmod>2026-11-01</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
 </urlset>

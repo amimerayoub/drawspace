@@ -36,7 +36,7 @@ function cleanTags(tags: unknown): string[] {
   return [...new Set(cleaned)];
 }
 
-export function validateBlogInput(input: BlogInput, maxContent = 10000): Required<Omit<BlogInput, 'id'>> & { id?: string } {
+export function validateBlogInput(input: BlogInput, maxContent = 50000): Required<Omit<BlogInput, 'id'>> & { id?: string } {
   const title = String(input.title ?? '').trim();
   if (title.length < 1 || title.length > 255 || UNSAFE_TEXT.test(title)) throw new HttpError(400, 'Title must be 1 to 255 characters.', 'VALIDATION_ERROR');
   const slug = input.slug === undefined || input.slug === '' ? slugifyName(title) : String(input.slug).trim().toLowerCase();
@@ -86,7 +86,7 @@ export class BlogService {
           const size = Number(content?.size);
           return { keys: new Set(columns.map((column) => column.key)), contentSize: Number.isFinite(size) && size > 0 ? size : 10000 };
         })
-        .catch(() => ({ keys: new Set<string>(), contentSize: 10000 }));
+        .catch(() => ({ keys: new Set<string>(), contentSize: 50000 }));
     }
     return this.columnMeta;
   }

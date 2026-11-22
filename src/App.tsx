@@ -109,6 +109,7 @@ const siteRoutes = (
       <Route path="results/:code" element={<RequireAuth><Results /></RequireAuth>} />
       <Route path="leaderboard" element={<Leaderboard />} />
       <Route path="blog" element={<Blog />} />
+      <Route path="blog/category/:categorySlug" element={<Blog />} />
       <Route path="blog/:slug" element={<BlogArticle />} />
       <Route path="rules" element={<Rules />} />
       <Route path="terms" element={<Legal kind="terms" />} />

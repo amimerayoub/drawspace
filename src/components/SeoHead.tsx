@@ -28,8 +28,9 @@ function setLink(rel: string, href: string) {
 
 /* Per-route document head: title, description, canonical URL, Open Graph and
    Twitter Card. The generated home share card is the default social image. */
-export function SeoHead({ title, description, image = BRAND.ogHome, type = 'website', canonical: canonicalOverride, noindex = false }: {
+export function SeoHead({ title, description, image = BRAND.ogHome, type = 'website', canonical: canonicalOverride, noindex = false, structuredData }: {
   title: string; description?: string; image?: string; type?: 'website' | 'article'; canonical?: string; noindex?: boolean;
+  structuredData?: Record<string, unknown> | Array<Record<string, unknown>>;
 }) {
   const { locale } = useI18n();
   const { pathname } = useLocation();
@@ -59,6 +60,21 @@ export function SeoHead({ title, description, image = BRAND.ogHome, type = 'webs
     setMeta('name', 'twitter:title', title);
     setMeta('name', 'twitter:description', desc);
     setMeta('name', 'twitter:image', image);
-  }, [title, description, image, type, canonicalOverride, noindex, locale, pathname, config.siteName, config.faviconUrl, config.seoDescription, config.tagline]);
+
+    if (structuredData) {
+      let script = document.head.querySelector<HTMLScriptElement>('script[type="application/ld+json"]#seo-structured-data');
+      if (!script) {
+        script = document.createElement('script');
+        script.type = 'application/ld+json';
+        script.id = 'seo-structured-data';
+        document.head.appendChild(script);
+      }
+      script.textContent = JSON.stringify(structuredData);
+    }
+
+    return () => {
+      document.head.querySelector('script[type="application/ld+json"]#seo-structured-data')?.remove();
+    };
+  }, [title, description, image, type, canonicalOverride, noindex, structuredData, locale, pathname, config.siteName, config.faviconUrl, config.seoDescription, config.tagline]);
   return null;
 }

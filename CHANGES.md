@@ -736,3 +736,201 @@ mocked config carrying custom IDs it injected `GTM-TEST999` / `G-TEST123456` and
 `G-TEST123456`, proving the IDs come from config. The admin Analytics panel was verified via
 typecheck + the built Settings bundle (labels and field bindings present); an authenticated
 click-through was not performed.
+
+## Blog SEO growth system: article limit, public blog, Studio markdown, technical SEO
+
+Scope: raise the article length cap across every layer, finish the public blog pages, fix the
+Studio's legacy-markdown conversion, and make the article metadata/sitemap correct. No new blog
+application, Appwrite stays the database, no records deleted, nothing published.
+
+### Article length limit (10,000 -> 50,000)
+
+The cap was enforced in four independent places, so raising one alone still truncated articles:
+
+- `server/src/content/blogService.ts`: `validateBlogInput(input, maxContent = 50000)` plus the
+  same default in the metadata fallback path.
+- `server/src/mcp/tools.ts`: `content` schemas for create and update now `.max(50000)`.
+- `server/src/routes/contentRoutes.ts`: `postSchema` accepts up to 50,000.
+- Appwrite `blog_posts.content`: the column is **50,000** in production (verified by read).
+
+Studio documents use a separate budget: `STUDIO_DOC_MAX = 500_000` in `src/studio/types.ts`, and
+`/api/v1/admin/blog-studio/config` reports `contentLimit`, `studioLimit`, `canUseCustomJs` so the
+editor shows the real numbers instead of a hardcoded guess. A studio doc is JSON, so it is larger
+than the prose it renders; the plain-text cap stays at 50,000.
+
+### Public blog frontend
+
+- `src/App.tsx`: added the `blog/category/:categorySlug` route. Blog routes only exist under a
+  locale prefix (`LOCALES.map(...)` wraps `siteRoutes`); a locale-free `/blog/...` falls through to
+  the catch-all and redirects to the homepage. This constraint drove the canonical fixes below.
+- `src/routes/Blog.tsx`: category slug is read from and synced to the URL, the hero shows the
+  newest article only when unfiltered, category and tag tabs filter the grid, search and the
+  play/create CTA are wired.
+- `src/routes/BlogArticle.tsx`: studio branch renders `StudioContent`, markdown branch renders the
+  new `BlogMarkdown`; reading time, table of contents, FAQ extraction, share bar, related articles,
+  prev/next, breadcrumb and CTA all present.
+- `src/components/BlogMarkdown.tsx` (new): CommonMark-lite renderer for posts written before the
+  Studio. External hrefs are restricted to `^(?:https?:|mailto:)`, internal links must start with a
+  single `/` (protocol-relative `//host` is rejected), so `javascript:`, `data:` and `//evil.com`
+  cannot become links.
+- `src/styles/pages.css`: +450 lines for the blog index, category page, article layout, share bar,
+  related list and studio article body.
+
+### Studio legacy markdown conversion (root cause of the broken preview)
+
+`legacyToDoc` used to split the content on blank lines and escape every chunk into a `paragraph`
+block. `BlogStudio.tsx` loads a legacy post through that converter and serializes the result back
+on save, so opening an old markdown post in the Studio permanently destroyed its structure: the
+article rendered `# Heading` and `**bold**` as literal text.
+
+`src/studio/types.ts` now parses the same grammar `BlogMarkdown` renders: fenced code, pipe tables,
+thematic breaks, ATX headings, blockquotes, ordered/unordered lists and paragraphs. Two helpers keep
+the two field kinds honest, because the Studio renders them differently:
+
+- `markdownToPlainText` for `heading.text`, `quote.text`, `list.items[]`, `table.rows[][]`,
+  `code.code`, which are plain-text React children. Inline markup is reduced to its words.
+- `markdownToInlineHtml` for `paragraph`/`callout`/`card`/`html`, which are sanitized HTML. Links
+  are checked with `isSafeUrl` and everything else is escaped, so only the allowlisted inline tags
+  survive.
+
+`stripHtml` was tightened in the same file: inline tags now appear inside paragraph html, so it
+replaces tags with a space, collapses whitespace and pulls the gap back out before punctuation
+(`word ,` -> `word,`). This keeps the excerpt fallback and word counts correct.
+
+Verified against the real published article's recovered markdown: 57 blocks (22 heading,
+23 paragraph, 8 separator, 3 list, 1 table) and zero leaked markdown markers in any field.
+
+Simplest-option notes (ambiguities resolved, per the working rules):
+- Markdown `# H1` maps to a level-2 heading block, because the article page owns the only `h1`.
+- Plain-text fields lose inline emphasis by design; the Studio cannot render `<strong>` inside a
+  heading or list item. Prose paragraphs keep it.
+- Conversion is one-way. Saving a converted post stores studio JSON; there is no studio -> markdown
+  path, so the original markdown should be backed up before the first Studio save.
+- `[label](javascript:alert(1))` renders as `label)` (stray paren) because the link pattern stops at
+  the first `)`. `BlogMarkdown` has the identical grammar; changing one would desynchronize the two
+  renderers, so the quirk is left matching.
+
+### Technical SEO fixes
+
+- `src/components/SeoHead.tsx`: new `structuredData` prop injects
+  `script[type="application/ld+json"]#seo-structured-data` and removes it on cleanup, so JSON-LD
+  follows the route instead of accumulating.
+- `src/routes/BlogArticle.tsx`: two real bugs found by browser verification, not by reading.
+  1. The canonical fallback was `https://drawspace.cloud/blog/<slug>`, a URL that redirects to the
+     homepage. It now uses `path()` so the canonical is locale-prefixed
+     (`/en-US/blog/<slug>`), matching the only route that actually serves the article.
+  2. `BreadcrumbList` items 1-3 were locale-free while item 4 was locale-prefixed. All items now go
+     through `path()` and match the visible breadcrumb exactly.
+  Emits `BlogPosting` + `BreadcrumbList`, plus `FAQPage` when the markdown branch finds FAQs.
+  `/blog/category/:slug` needed no change: `SeoHead`'s default canonical is already
+  `${SITE_URL}${pathname}`.
+
+### Sitemap maintenance
+
+`scripts/generate-sitemap.mjs` (new) + `npm run sitemap`. The static sitemap was drifting on every
+publish. The script reads the locale list from the sitemap's own first `<url>` block (single source
+of truth), paginates `GET /api/v1/public/blogs` (the API caps `limit` at 100 and pages with
+`pagination.nextCursor`), preserves every static route and regenerates only article entries:
+`<loc>` for the default locale plus 8 hreflang alternates and `x-default`, `lastmod` from
+`updatedAt || publishedAt`, changefreq monthly, priority 0.8, newest first. It skips the write when
+the output is identical, and `--dry` prints without writing. Drafts never appear, because the public
+endpoint only returns published posts.
+
+`public/sitemap.xml` regenerated: 58 `<url>` entries (56 static + the 2 published articles).
+`localhost` is normalized to `127.0.0.1` because Node resolves `localhost` to `::1` first while the
+dev server binds IPv4 only.
+
+### Documentation
+
+- `docs/BLOG_STUDIO_GUIDE.md` (new): how to use the Studio. Entry points and roles, layout, all 24
+  blocks in 4 groups with per-block gotchas, 6 built-in templates, 5 presets and the design fields,
+  media picker, autosave timings, device widths, history, shortcuts, the custom-code sandbox and its
+  real placement labels, SEO/publish panels with the metadata fallback table, storage limits,
+  `.studio.json` import/export, the markdown -> block conversion table and its two warnings, public
+  rendering, troubleshooting.
+- `docs/MCP_SETUP.md`: new section 8.1 "Connecting from Qoder Desktop" - create the key at
+  `/admin/mcp`, add a remote HTTP MCP server in Qoder's MCP settings pointing at
+  `https://server.drawspace.cloud/mcp` with `Authorization: Bearer <key>`, expect the 19
+  `drawspace_*` tools. Troubleshooting table for no tools / 401 / 403 / 405 / 429 / 503
+  MIGRATION_REQUIRED. Keys are entered through the UI, never written into a project file.
+- `docs/CONTENT_MANAGEMENT_GUIDE.md`: pointer to the Studio guide.
+
+### Verification
+
+`npm run build` clean; `npm run typecheck` and `npm run server:typecheck` clean; `npm test`
+165 tests, 161 pass, 0 fail, 4 skipped.
+
+Browser, against the built bundle on a local preview with the real backend reading production
+Appwrite: article canonical and `og:url` both
+`https://drawspace.cloud/en-US/blog/tips-to-guess-faster-in-drawing-games`, `og:type article`,
+robots `index, follow`, JSON-LD `[BlogPosting, BreadcrumbList]` with all four breadcrumb items
+locale-prefixed and matching the visible nav, 3 share buttons carrying the canonical, CTA to
+`/en-US/create` and `/en-US/play`. Category page self-canonical with category-specific
+title/description, tab synced from the URL, filtered to 1 card, no hero. Blog index shows the hero,
+grid, category and tag tabs, search and CTA. `/sitemap.xml` parses with no parsererror, 58 URLs,
+both published articles, no malformed locale URLs. Zero console errors.
+
+Server-side React render of the markdown branch on the recovered article: h2 8, h3 13, h1 0, ul 2,
+ol 1, li 13, table 1 (th 3 / td 12), hr 8, strong 9, em 11, inline code 9, no leaked markdown, no
+`<script>`; `extractHeadings` 21, `extractFaqs` 3. Hostile-input check: `javascript:`, `data:` and
+`//evil.com` hrefs dropped, `/play` and `https://example.com` kept.
+
+### Repaired: the corrupted published article (user-approved)
+
+The published article `tips-to-guess-faster-in-drawing-games` was **corrupted in production data**:
+its `content` held a `DS-STUDIO-1` document whose 40 blocks were all `paragraph`, so the live page
+showed `# How to Get Better at Skribbl.io...` as literal text with no headings and no table of
+contents. The converter fix above prevents a recurrence, but it cannot repair a row that was
+already flattened.
+
+The original markdown was recovered losslessly from those 40 paragraphs (unescape entities, rejoin
+with blank lines): 6,138 characters, 994 words, 1 h1 / 8 h2 / 13 h3, 6 bullets, 7 ordered items,
+6 table lines, 18 bold spans, 10 links.
+
+With explicit approval, the row was restored. The previous 9,486-character studio value was backed
+up first and the backup verified byte-identical (sha256 prefix `7195f2bc332449c2`); only `content`
+and `updatedAt` were written. `status`, `publishedAt`, `views`, `tags`, `categoryId`, `seoTitle`,
+`seoDescription` and `excerpt` are unchanged.
+
+Verified after the write: the live value is byte-identical to the recovered markdown
+(sha256 prefix `8b6fa48e75b48d3a`), the sentinel is gone, and the rendered page now uses the
+markdown branch (`article-body`, not `article-body-studio`) with 8 h2 / 13 h3 / 0 h1, 1 table
+(12 cells), 3 lists (13 items), 8 `hr`, 9 `strong`, 11 `em`, 9 inline code, and **no literal `#`,
+`**` or `{#` anywhere**. The table of contents has 21 links and **zero dead anchors**; all 8 in-page
+anchors resolve. JSON-LD is now `[BlogPosting, BreadcrumbList, FAQPage]` with 3 FAQs, all four
+breadcrumb items locale-prefixed, canonical and `og:url` both
+`https://drawspace.cloud/en-US/blog/tips-to-guess-faster-in-drawing-games`, `og:type article`,
+robots `index, follow`, 3 share buttons. The only console error is the anonymous
+`GET /v1/account` 401 session probe, which is expected for a logged-out visitor.
+
+`public/sitemap.xml` was regenerated afterwards so the article's `lastmod` moved to 2026-11-22.
+
+Known remaining nit on that row: `authorName` is `mcp:claude`, so the meta line renders
+"By mcp:claude" while the body byline says "DrawSpace Editorial Team". Left untouched because the
+approval covered the content restore, not the author field.
+
+### Outstanding content gaps (not done)
+
+Two further gaps were measured, not assumed. Fixing them means replacing existing editorial bodies,
+so they were left alone:
+
+- **Word count.** The brief asks for 1,200-2,000 words per article. The existing blueprint drafts
+  fall short: `how-to-draw-better-with-a-mouse` is ~5,400 characters (~800 words),
+  `skribbl-io-alternatives-unblocked` is ~6,300 characters (~950 words), and the restored published
+  article is 994 words. The drafts are complete articles, not placeholders, but they need expanding
+  to reach the target. A full 20-article word-count audit was not run: the scratch script that would
+  have read every row through the Appwrite REST API was blocked because it loads credentials from
+  `.env.local`, so the counts above are a measured sample rather than a census.
+- **Dead table-of-contents anchor.** In `skribbl-io-alternatives-unblocked` the contents list links
+  to `#firewall-compatibility`, but the heading is `## 3. Chromebook Performance & Firewall
+  Comparison` with no `{#...}` id, so it slugifies to something else. `BlogMarkdown` and
+  `extractHeadings` both honour `{#id}` correctly (verified on the restored article: 21 TOC links,
+  zero dead); this is a content typo, not a code bug. Other articles should be checked for the same
+  mismatch.
+
+Internal linking is also weaker than the brief wants: every in-body link in the sampled articles
+points at `https://drawspace.cloud` (the site root) or an in-page anchor, not at related articles or
+the play/create routes. The 8 category clusters exist, but cross-article links need authoring.
+
+Nine drafts outside the 20 blueprints still hold the literal body
+`[DRAFT PLACEHOLDER - article body not yet written]`. They were preserved, not deleted.

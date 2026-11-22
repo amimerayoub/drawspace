@@ -55,7 +55,7 @@ export default function BlogStudio() {
   const [dirty, setDirty] = useState(false);
   const [saveState, setSaveState] = useState<SaveState>('idle');
   const [savedAt, setSavedAt] = useState('');
-  const [contentLimit, setContentLimit] = useState(10000);
+  const [contentLimit, setContentLimit] = useState(50000);
   const [canUseJs, setCanUseJs] = useState(role === 'admin' || role === 'superadmin');
 
   const [leftTab, setLeftTab] = useState<'blocks' | 'templates' | 'media'>('blocks');
@@ -108,7 +108,7 @@ export default function BlogStudio() {
 
   useEffect(() => {
     void apiGet<{ contentLimit: number; studioLimit?: number; canUseCustomJs: boolean }>('/api/v1/admin/blog-studio/config')
-      .then((config) => { setContentLimit(config.studioLimit || config.contentLimit || 10000); setCanUseJs(Boolean(config.canUseCustomJs)); })
+      .then((config) => { setContentLimit(config.studioLimit || config.contentLimit || 50000); setCanUseJs(Boolean(config.canUseCustomJs)); })
       .catch(() => undefined);
     void contentService.blogCategories().then((cats) => setCategories(cats.map((c) => c.name))).catch(() => undefined);
   }, []);

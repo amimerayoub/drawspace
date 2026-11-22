@@ -165,6 +165,29 @@ Placeholders only. Adapt the shape to your specific client; consult that client'
 
 For a local server, replace the URL with `http://localhost:3001/mcp`. Some clients label the transport `streamable-http` or `http`; select the Streamable HTTP option, not the legacy SSE-only option.
 
+### 8.1 Connecting from Qoder Desktop
+
+Add the server through the Qoder MCP settings screen rather than by editing a configuration file. The key is a bearer secret, and the settings screen keeps it out of the project tree, out of Git, and out of any file an agent can read back.
+
+1. Create the key first: `/admin/mcp` then **Create key** (see section 4), or use the bootstrap key already present in your backend environment. Copy it immediately; the plaintext is shown once.
+2. Open Qoder settings, find the MCP section, and add a server.
+3. Choose the remote HTTP transport and set the URL to `https://server.drawspace.cloud/mcp`.
+4. Add the credential as an `Authorization` header with the value `Bearer <your key>`. Qoder's header field takes the whole value, so include the `Bearer ` prefix yourself.
+5. Save and let Qoder list the tools. A successful connection shows the 19 `drawspace_*` tools from section 9.
+
+Troubleshooting a Qoder connection:
+
+| Symptom | Cause |
+| --- | --- |
+| The server is added but no tools appear | The backend has not been redeployed since the MCP module was added, so `/mcp` returns 404. Deploy the backend; pushing to Git does not deploy it. |
+| `401` on every call | The key was revoked or expired, the `Bearer ` prefix is missing, or the environment bootstrap key is not set on the running backend instance. |
+| `403` for a specific tool | The key lacks that tool's scope. Read-only keys cannot create, update, publish, delete, or import. |
+| `405` | The client used GET or DELETE. This endpoint is POST-only and stateless, so it does not offer the legacy SSE transport. |
+| `429` | The per-instance rate limit (120 requests per minute) was reached. Wait and retry. |
+| `503 MIGRATION_REQUIRED` from key management | The `mcp_api_keys` table does not exist yet. Apply the content schema migration, or use the environment bootstrap key. |
+
+Do not paste the key into a project file, a `.env` that is committed, or a chat message. If it was ever exposed, rotate it from `/admin/mcp`.
+
 ## 9. Available MCP tools
 
 All tools return a structured envelope `{ "success": boolean, "message": string, "data": ... }` with real Appwrite ids and values. Failed operations return `success: false` with a `code` and never claim a write succeeded.

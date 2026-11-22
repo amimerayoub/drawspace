@@ -2,6 +2,8 @@
    A studio document is stored in blog_posts.content as sentinel-prefixed JSON.
    Legacy posts keep plain paragraph text and render unchanged. */
 
+import { isSafeUrl } from './sanitize';
+
 export const STUDIO_SENTINEL = 'DS-STUDIO-1';
 
 export type BlockType =
@@ -168,10 +170,131 @@ export function parseDoc(content: string): StudioDoc | null {
     return null;
   } catch { return null; }
 }
+/* ---------- Legacy markdown -> studio blocks ----------
+   Posts written before the studio hold CommonMark-lite text in the same content
+   column, and the editor converts it the first time they are opened. The grammar
+   here mirrors BlogMarkdown so a post reads the same before and after conversion. */
+
+/* Heading, list, quote and table fields are rendered as text, so inline markup is
+   reduced to its words instead of surviving as literal asterisks. */
+export function markdownToPlainText(value: string): string {
+  return value
+    .replace(/!\[([^\]]*)\]\([^)]*\)/g, '$1')
+    .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')
+    .replace(/\*\*([^*]+)\*\*/g, '$1')
+    .replace(/__([^_]+)__/g, '$1')
+    .replace(/\*([^*\n]+)\*/g, '$1')
+    .replace(/`([^`]+)`/g, '$1')
+    .trim();
+}
+
+/* Paragraph, callout and card fields hold HTML, so inline markup becomes the
+   allowlisted subset the studio sanitizer keeps. */
+export function markdownToInlineHtml(value: string): string {
+  // Built per call: the recursion below would otherwise reset a shared lastIndex.
+  const token = /(\[[^\]]+\]\([^)\s]+\))|(\*\*[^*]+\*\*)|(`[^`]+`)|(\*[^*\n]+\*)/g;
+  let out = '';
+  let last = 0;
+  let match: RegExpExecArray | null;
+  while ((match = token.exec(value))) {
+    out += escapeHtml(value.slice(last, match.index));
+    const found = match[0];
+    if (match[1]) {
+      const split = found.indexOf('](');
+      const label = found.slice(1, split);
+      const href = found.slice(split + 2, -1).trim();
+      out += isSafeUrl(href) ? `<a href="${escapeHtml(href)}">${escapeHtml(label)}</a>` : escapeHtml(label);
+    } else if (match[2]) {
+      out += `<strong>${markdownToInlineHtml(found.slice(2, -2))}</strong>`;
+    } else if (match[3]) {
+      out += `<code>${escapeHtml(found.slice(1, -1))}</code>`;
+    } else {
+      out += `<em>${escapeHtml(found.slice(1, -1))}</em>`;
+    }
+    last = match.index + found.length;
+  }
+  return out + escapeHtml(value.slice(last));
+}
+
+const isTableLine = (line: string) => line.startsWith('|') && line.endsWith('|');
+const isTableRule = (line: string) => line.includes('-') && /^[\s|:-]+$/.test(line);
+const splitTableRow = (line: string) => line.split('|').slice(1, -1).map((cell) => markdownToPlainText(cell));
+
 export function legacyToDoc(content: string): StudioDoc {
   const doc = emptyDoc();
-  doc.blocks = content.split(/\n\s*\n/).map((p) => p.trim()).filter(Boolean)
-    .map((text) => ({ id: uid(), type: 'paragraph', html: escapeHtml(text), align: 'start' }) as ParagraphBlock);
+  const blocks: Block[] = [];
+  const lines = content.replace(/\r\n/g, '\n').split('\n');
+  let i = 0;
+
+  while (i < lines.length) {
+    const trimmed = lines[i].trim();
+
+    if (!trimmed) { i++; continue; }
+
+    if (trimmed.startsWith('```')) {
+      const language = trimmed.slice(3).trim() || 'text';
+      const code: string[] = [];
+      i++;
+      while (i < lines.length && !lines[i].trim().startsWith('```')) { code.push(lines[i]); i++; }
+      i++;
+      blocks.push({ id: uid(), type: 'code', language, code: code.join('\n') });
+      continue;
+    }
+
+    if (isTableLine(trimmed)) {
+      const rows: string[][] = [];
+      let header = false;
+      while (i < lines.length && isTableLine(lines[i].trim())) {
+        const row = lines[i].trim();
+        if (isTableRule(row)) header = true;
+        else rows.push(splitTableRow(row));
+        i++;
+      }
+      if (rows.length > 0) blocks.push({ id: uid(), type: 'table', header, rows });
+      continue;
+    }
+
+    if (/^(?:-{3,}|\*{3,}|_{3,})$/.test(trimmed)) {
+      blocks.push({ id: uid(), type: 'separator', style: 'line' });
+      i++;
+      continue;
+    }
+
+    const heading = /^(#{1,6})\s+(.*)$/.exec(trimmed);
+    if (heading) {
+      // The article page owns the only H1, so markdown H1 and H2 both land on H2.
+      const level = Math.max(2, Math.min(6, heading[1].length)) as 2 | 3 | 4 | 5 | 6;
+      blocks.push({ id: uid(), type: 'heading', level, text: markdownToPlainText(heading[2].replace(/\{#[^}]+\}/, '')), align: 'start' });
+      i++;
+      continue;
+    }
+
+    if (trimmed.startsWith('> ')) {
+      const quoted: string[] = [];
+      while (i < lines.length && lines[i].trim().startsWith('> ')) { quoted.push(markdownToPlainText(lines[i].trim().slice(2))); i++; }
+      blocks.push({ id: uid(), type: 'quote', text: quoted.join('\n'), cite: '' });
+      continue;
+    }
+
+    const itemPattern = /^\d+\.\s+(.*)$/.test(trimmed) ? /^\d+\.\s+(.*)$/ : /^[-*+]\s+(.*)$/;
+    if (itemPattern.test(trimmed)) {
+      const ordered = itemPattern.source.startsWith('^\\d');
+      const items: string[] = [];
+      while (i < lines.length) {
+        const match = itemPattern.exec(lines[i].trim());
+        if (!match) break;
+        items.push(markdownToPlainText(match[1]));
+        i++;
+      }
+      blocks.push({ id: uid(), type: 'list', ordered, items });
+      continue;
+    }
+
+    blocks.push({ id: uid(), type: 'paragraph', html: markdownToInlineHtml(trimmed), align: 'start' });
+    i++;
+  }
+
+  doc.blocks = blocks;
   return doc;
 }
 export function docToPlainText(doc: StudioDoc): string {
@@ -194,7 +317,8 @@ export function escapeHtml(value: string): string {
   return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 export function stripHtml(html: string): string {
-  return html.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+  // Inline tags become spaces, so pull the gap back out before punctuation.
+  return html.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').replace(/\s+([,.;:!?])/g, '$1').trim();
 }
 
 /* ---------- Design presets ---------- */

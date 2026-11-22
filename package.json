@@ -13,6 +13,7 @@
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "optimize:images": "node server/scripts/optimize-static-media.mjs",
+    "sitemap": "node --env-file-if-exists=.env.local scripts/generate-sitemap.mjs",
     "server": "tsx server/src/index.ts",
     "test": "tsx --test server/src/**/*.test.ts",
     "test:http-e2e": "tsx --test server/src/httpE2e.test.ts",

@@ -67,7 +67,7 @@ export function buildMcpServer(words: WordService, blogs: BlogService, context: 
   server.registerTool('drawspace_create_blog', {
     description: 'Create a blog article. Defaults to draft. A non-draft status also requires the blogs:publish scope.',
     inputSchema: {
-      title: z.string().min(1).max(255), content: z.string().min(1).max(10000),
+      title: z.string().min(1).max(255), content: z.string().min(1).max(50000),
       excerpt: z.string().max(500).optional(), slug: z.string().max(64).optional(), category: z.string().max(64).optional(),
       tags: z.array(z.string().max(40)).max(12).optional(), status: z.enum(blogStatuses).optional(), cover: z.string().max(255).optional(),
       seoTitle: z.string().max(128).optional(), seoDescription: z.string().max(255).optional(), publishAt: z.string().max(64).optional(),
@@ -82,7 +82,7 @@ export function buildMcpServer(words: WordService, blogs: BlogService, context: 
   server.registerTool('drawspace_update_blog', {
     description: 'Update fields of an existing blog article by id (requires blogs:update).',
     inputSchema: {
-      id: z.string().min(1).max(64), title: z.string().min(1).max(255).optional(), content: z.string().min(1).max(10000).optional(),
+      id: z.string().min(1).max(64), title: z.string().min(1).max(255).optional(), content: z.string().min(1).max(50000).optional(),
       excerpt: z.string().max(500).optional(), slug: z.string().max(64).optional(), category: z.string().max(64).optional(),
       tags: z.array(z.string().max(40)).max(12).optional(), cover: z.string().max(255).optional(),
       seoTitle: z.string().max(128).optional(), seoDescription: z.string().max(255).optional(), publishAt: z.string().max(64).optional(),
