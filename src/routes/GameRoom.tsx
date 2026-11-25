@@ -172,7 +172,7 @@ export default function GameRoom() {
 
   return (
     <div className={`game-shell ${phase === 'finished' ? 'finished' : ''}`}>
-      <SeoHead title={`${room.name} · DrawSpace`} />
+      <SeoHead title={`${room.name} · DrawSpace`} description={t('seo.game')} noindex />
       <header className="game-topbar">
         <div className="game-top-left"><Link to={path('/')} className="game-brand" aria-label="DrawSpace">✦</Link><div className="game-room-meta"><span className="game-room-name">{room.name}</span><span className="game-round faint">{t('game.roundOf', { current: room.round, total: room.rounds })}</span></div></div>
         <div className="game-word-area">

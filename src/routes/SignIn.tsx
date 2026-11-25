@@ -49,7 +49,7 @@ export default function SignIn() {
 
   return (
     <>
-      <SeoHead title={t('auth.signInTitle')} description={t('auth.signInSub')} />
+      <SeoHead title={`${t('auth.signInTitle')} · DrawSpace`} description={t('seo.signIn')} noindex />
       <AuthPanel
         mode="in"
         title={t('auth.signInTitle')}

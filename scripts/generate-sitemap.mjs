@@ -1,56 +1,35 @@
-/* Regenerate the blog article entries in public/sitemap.xml from the public API.
+/* Regenerate public/sitemap.xml from the public blog API.
 
-   The static routes in the file are left untouched, so this is safe to re-run
-   after every publish. Only published articles are ever listed: the public
-   endpoint does not return drafts, archived, or future-scheduled posts.
+   Uses scripts/sitemap.mjs, the same module scripts/prerender.mjs uses to write
+   dist/sitemap.xml, so both files list exactly the same URLs. Safe to re-run
+   after every publish; only published articles are ever listed.
 
    Usage:
      node scripts/generate-sitemap.mjs                 # rewrite public/sitemap.xml
      node scripts/generate-sitemap.mjs --dry           # print what would change
      VITE_GAME_SERVER_URL=http://localhost:3001 node scripts/generate-sitemap.mjs
 */
-import { readFileSync, writeFileSync } from 'node:fs';
+import { writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
+import { buildSitemap } from './sitemap.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const sitemapPath = join(root, 'public', 'sitemap.xml');
-const siteUrl = 'https://drawspace.cloud';
 // Node resolves localhost to ::1 first, which the dev server does not bind.
 const origin = (process.env.VITE_GAME_SERVER_URL || 'https://server.drawspace.cloud')
   .replace(/\/+$/, '')
   .replace('//localhost', '//127.0.0.1');
 const dryRun = process.argv.includes('--dry');
 
-const xmlEscape = (value) => value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-
-/* Locales come from the sitemap itself so the file stays the single source of
-   truth and a new locale does not require editing this script. */
-function readLocales(xml) {
-  const firstUrl = /<url>[\s\S]*?<\/url>/.exec(xml)?.[0] ?? '';
-  const codes = [...firstUrl.matchAll(/hreflang="([^"]+)"/g)].map((m) => m[1]).filter((c) => c !== 'x-default');
-  return codes.length > 0 ? codes : ['en-US'];
-}
-
-function articleUrl(slug, locales, lastmod) {
-  const primary = `${siteUrl}/${locales[0]}/blog/${slug}`;
-  const alternates = locales
-    .map((code) => `    <xhtml:link rel="alternate" hreflang="${code}" href="${siteUrl}/${code}/blog/${slug}"/>`)
-    .concat([`    <xhtml:link rel="alternate" hreflang="x-default" href="${primary}"/>`])
-    .join('\n');
-  return [
-    '  <url>',
-    `    <loc>${primary}</loc>`,
-    alternates,
-    `    <lastmod>${lastmod}</lastmod>`,
-    '    <changefreq>monthly</changefreq>',
-    '    <priority>0.8</priority>',
-    '  </url>',
-  ].join('\n');
-}
-
-const current = readFileSync(sitemapPath, 'utf8');
-const locales = readLocales(current);
+/* Locales come from the i18n registry so a new locale cannot be forgotten.
+   The source is plain TypeScript with a single array literal, so it is read as
+   text rather than importing the module graph into a Node script. */
+const i18n = await import('node:fs').then((fs) =>
+  fs.readFileSync(join(root, 'src', 'i18n', 'I18nContext.tsx'), 'utf8'),
+);
+const localeCodes = [...i18n.matchAll(/\{\s*code:\s*'([^']+)'\s*,\s*label:/g)].map((m) => m[1]);
+const DEFAULT_LOCALE = /DEFAULT_LOCALE[^=]*=\s*'([^']+)'/.exec(i18n)?.[1] ?? localeCodes[0];
 
 /* The public list caps limit at 100 and pages with a cursor. */
 const articles = [];
@@ -65,36 +44,21 @@ for (let page = 0; page < 50; page += 1) {
   if (!cursor) break;
 }
 
-// Drop existing article entries; /blog and /blog/category/* index pages are kept.
-const blocks = current.match(/[ \t]*<url>[\s\S]*?<\/url>\n?/g) ?? [];
-const isArticle = (block) => /<loc>[^<]*\/blog\/(?!category\/)[^<]+<\/loc>/.test(block);
-const kept = blocks.filter((block) => !isArticle(block));
-const removed = blocks.length - kept.length;
-
-const generated = articles
-  .filter((article) => article.slug && article.status === 'published')
-  .sort((a, b) => String(b.publishedAt ?? '').localeCompare(String(a.publishedAt ?? '')))
-  .map((article) => articleUrl(
-    article.slug,
-    locales,
-    String(article.updatedAt || article.publishedAt || '').slice(0, 10),
-  ));
-
-const head = current.slice(0, current.indexOf(blocks[0] ?? ''));
-const tail = '</urlset>\n';
-const next = `${head}${kept.join('')}${generated.map((entry) => `${entry}\n`).join('')}${tail}`;
-
+const published = articles.filter((article) => article.slug && article.status === 'published');
+const next = buildSitemap({
+  locales: localeCodes.map((code) => ({ code })),
+  articles: published,
+  defaultLocale: DEFAULT_LOCALE,
+});
+const urlCount = (next.match(/<url>/g) ?? []).length;
 console.log(`origin: ${origin}`);
-console.log(`locales: ${locales.join(', ')}`);
-console.log(`published articles: ${generated.length}`);
-console.log(`article entries removed: ${removed}, written: ${generated.length}`);
-console.log(`total <url> entries: ${kept.length + generated.length}`);
+console.log(`locales: ${localeCodes.join(', ')}`);
+console.log(`published articles: ${published.length}`);
+console.log(`total <url> entries: ${urlCount}`);
 
 if (dryRun) {
   console.log('\n--dry: public/sitemap.xml was not written.');
-  for (const article of generated) console.log(`  ${article.match(/<loc>([^<]+)</)[1]}`);
-} else if (next === current) {
-  console.log('public/sitemap.xml is already up to date.');
+  for (const match of next.matchAll(/<loc>([^<]+)<\/loc>/g)) console.log(`  ${match[1]}`);
 } else {
   writeFileSync(sitemapPath, next, 'utf8');
   console.log('public/sitemap.xml updated.');

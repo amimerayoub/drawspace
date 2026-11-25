@@ -31,7 +31,7 @@ export default function Play() {
 
   return (
     <div className="page">
-      <SeoHead title={`${t('play.title')} · DrawSpace`} description={t('play.sub')} />
+      <SeoHead title={t('seo.playTitle')} description={t('seo.play')} />
       <div className="container container-narrow">
         <div className="page-head">
           <h1 className="page-title">{t('play.title')}</h1>

@@ -14,23 +14,33 @@ import {
   ChevronLeft,
   Calendar,
 } from 'lucide-react';
-import { useI18n } from '@/i18n/I18nContext';
+import { useI18n, DEFAULT_LOCALE } from '@/i18n/I18nContext';
 import { usePublicBlog } from '@/hooks/useQueries';
 import { BlogCover } from '@/components/BlogCover';
 import { AdSlot } from '@/components/AdSlot';
 import { Badge, EmptyState, Spinner } from '@/components/ui';
 import { SeoHead } from '@/components/SeoHead';
 import { docToPlainText, parseDoc } from '@/studio/types';
-import { StudioContent } from '@/studio/blocks';
+import { StudioContent, collectHeadings } from '@/studio/blocks';
 import { CustomCodeSection } from '@/studio/StudioArticle';
 import { BlogMarkdown, extractHeadings, extractFaqs } from '@/components/BlogMarkdown';
+import { BRAND } from '@/data/assets';
+
+/** A stored author is only publishable when it looks like a public name. */
+function publicAuthorName(value: unknown): string {
+  const raw = typeof value === 'string' ? value.trim() : '';
+  if (!raw || raw.length > 60) return '';
+  if (/[:@/_\d]/.test(raw)) return '';
+  if (/(mcp|claude|openai|gpt|bot|admin|system)/i.test(raw)) return '';
+  return raw;
+}
 
 function slugifyCategory(cat: string): string {
   return cat.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
 }
 
 export default function BlogArticle() {
-  const { t, path, formatDate } = useI18n();
+  const { t, path, formatDate, locale } = useI18n();
   const { slug } = useParams<{ slug: string }>();
   const { data, isLoading, isError } = usePublicBlog(slug);
   const article = data?.data;
@@ -43,8 +53,13 @@ export default function BlogArticle() {
     return parseDoc(article.studioDoc || article.content);
   }, [article]);
 
+  // Studio articles previously got no table of contents at all. Heading blocks
+  // render with an "s-" prefixed anchor, so link to those ids directly.
   const headings = useMemo(() => {
-    if (!article || studio) return [];
+    if (!article) return [];
+    if (studio) {
+      return collectHeadings(studio.blocks).map((h) => ({ id: `s-${h.id}`, text: h.text, level: h.level }));
+    }
     return extractHeadings(article.content);
   }, [article, studio]);
 
@@ -56,11 +71,13 @@ export default function BlogArticle() {
   const wordSource = article ? (studio ? docToPlainText(studio) : article.content) : '';
   const minutes = Math.max(3, Math.round(wordSource.split(/\s+/).filter(Boolean).length / 200));
 
+  // Article bodies are English-only. Every locale renders the same text with a
+  // translated shell, so all of them point at the default-locale URL instead of
+  // pretending a translation exists (see buildHeadTags' `translated` flag).
   const canonicalUrl = useMemo(() => {
-    // Blog routes only exist under a locale prefix; a locale-free URL redirects home.
-    if (!article) return `https://drawspace.cloud${path('/blog')}`;
-    return studio?.meta?.canonical || `https://drawspace.cloud${path(`/blog/${article.slug}`)}`;
-  }, [article, studio, path]);
+    if (!article) return `https://drawspace.cloud/${DEFAULT_LOCALE}/blog`;
+    return studio?.meta?.canonical || `https://drawspace.cloud/${DEFAULT_LOCALE}/blog/${article.slug}`;
+  }, [article, studio]);
 
   const handleCopyLink = useCallback(() => {
     if (typeof navigator !== 'undefined' && navigator.clipboard) {
@@ -79,21 +96,22 @@ export default function BlogArticle() {
       '@type': 'BlogPosting',
       headline: article.seoTitle || article.title,
       description: article.seoDescription || article.excerpt,
-      image: studio?.meta?.ogImage || article.cover || 'https://drawspace.cloud/og-home.png',
+      image: studio?.meta?.ogImage || article.cover || BRAND.ogHome,
       datePublished: article.publishedAt,
       dateModified: article.updatedAt || article.publishedAt,
-      author: {
-        '@type': 'Organization',
-        name: article.author || 'DrawSpace Editorial Team',
-        url: 'https://drawspace.cloud',
-      },
+      // The stored author is often an internal automation id ("mcp:claude").
+      // Publishing that as an author identity is both wrong and a leak, so only
+      // a plausible public name is emitted; otherwise the field is omitted.
+      ...(publicAuthorName(article.author)
+        ? { author: { '@type': 'Organization', name: publicAuthorName(article.author), url: 'https://drawspace.cloud' } }
+        : {}),
       publisher: {
         '@type': 'Organization',
         name: 'DrawSpace',
         url: 'https://drawspace.cloud',
         logo: {
           '@type': 'ImageObject',
-          url: 'https://drawspace.cloud/logo.png',
+          url: 'https://drawspace.cloud/favicon-192.png',
         },
       },
       mainEntityOfPage: {
@@ -102,7 +120,7 @@ export default function BlogArticle() {
       },
     };
 
-    const site = (route: string) => `https://drawspace.cloud${path(route)}`;
+    const site = (route: string) => `https://drawspace.cloud/${DEFAULT_LOCALE}${route}`;
     const breadcrumbSchema: Record<string, unknown> = {
       '@context': 'https://schema.org',
       '@type': 'BreadcrumbList',
@@ -188,6 +206,8 @@ export default function BlogArticle() {
         type="article"
         image={studio?.meta?.ogImage || article.cover || undefined}
         canonical={canonicalUrl}
+        noindex={locale !== DEFAULT_LOCALE}
+        translated={false}
         structuredData={structuredData}
       />
 
@@ -232,8 +252,8 @@ export default function BlogArticle() {
           <span className="faint article-read">
             <Clock size={12} aria-hidden /> {t('blog.minRead', { min: minutes })}
           </span>
-          {article.author && (
-            <span className="faint article-author-tag">By {article.author}</span>
+          {publicAuthorName(article.author) && (
+            <span className="faint article-author-tag">By {publicAuthorName(article.author)}</span>
           )}
         </div>
 

@@ -22,7 +22,7 @@ export default function Legal({ kind }: { kind: 'terms' | 'privacy' }) {
 
   return (
     <div className="page">
-      <SeoHead title={`${title} · DrawSpace`} />
+      <SeoHead title={`${title} · DrawSpace`} description={t(kind === 'terms' ? 'seo.terms' : 'seo.privacy')} />
       <div className="container container-narrow">
         <div className="page-head">
           <h1 className="page-title">{title}</h1>

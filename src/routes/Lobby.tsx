@@ -54,7 +54,7 @@ export default function Lobby() {
 
   return (
     <div className="page">
-      <SeoHead title={`${t('lobby.title')} · DrawSpace`} description={t('lobby.sub')} />
+      <SeoHead title={`${t('lobby.title')} · DrawSpace`} description={t('seo.lobby')} noindex />
       <div className="container">
         <div className="page-head page-head-row">
           <div><h1 className="page-title">{t('lobby.title')}</h1><p className="page-sub">{t('lobby.sub')}</p></div>

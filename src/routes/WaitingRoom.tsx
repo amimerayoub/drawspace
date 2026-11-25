@@ -95,7 +95,7 @@ export default function WaitingRoom() {
 
   return (
     <div className="page">
-      <SeoHead title={`${room.name} · DrawSpace`} />
+      <SeoHead title={`${room.name} · DrawSpace`} description={t('seo.room')} noindex />
       <div className="container container-narrow">
         <div className="page-head"><h1 className="page-title">{room.name}</h1><p className="page-sub">{t('waiting.title')}</p></div>
         <div className="panel panel-pad waiting-code">

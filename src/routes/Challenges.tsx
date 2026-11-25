@@ -33,7 +33,7 @@ export default function Challenges() {
 
   return (
     <div className="page">
-      <SeoHead title={`${t('challenges.title')} · DrawSpace`} />
+      <SeoHead title={`${t('challenges.title')} · DrawSpace`} description={t('seo.challenges')} noindex />
       <div className="container container-narrow">
         <div className="page-head">
           <h1 className="page-title">{t('challenges.title')}</h1>

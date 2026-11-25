@@ -77,7 +77,7 @@ export default function Profile() {
 
   return (
     <div className="page">
-      <SeoHead title={`${t('profile.title')} · DrawSpace`} />
+      <SeoHead title={`${t('profile.title')} · DrawSpace`} description={t('seo.profile')} noindex />
       <div className="container container-narrow">
         {progressionError && <p role="alert" className="muted">{progressionError}</p>}
         <div className="panel panel-pad profile-card">

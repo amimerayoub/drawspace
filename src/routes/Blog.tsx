@@ -1,7 +1,8 @@
-import { useMemo, useState, useEffect } from 'react';
+import { useMemo, useState } from 'react';
 import { Link, useParams, useNavigate } from 'react-router-dom';
 import { ArrowRight, Sparkles, BookOpen, Clock, Calendar } from 'lucide-react';
-import { useI18n } from '@/i18n/I18nContext';
+import { useI18n, DEFAULT_LOCALE } from '@/i18n/I18nContext';
+import { SITE_URL } from '@/seo/head';
 import { usePublicBlogs } from '@/hooks/useQueries';
 import { BlogCover } from '@/components/BlogCover';
 import { AdSlot } from '@/components/AdSlot';
@@ -13,11 +14,10 @@ function toSlug(text: string): string {
 }
 
 export default function Blog() {
-  const { t, path, formatDate } = useI18n();
+  const { t, path, formatDate, locale } = useI18n();
   const { categorySlug } = useParams<{ categorySlug?: string }>();
   const navigate = useNavigate();
 
-  const [category, setCategory] = useState('all');
   const [tag, setTag] = useState('all');
   const [search, setSearch] = useState('');
 
@@ -33,20 +33,14 @@ export default function Blog() {
     return ['all', ...Array.from(new Set(articles.flatMap((a) => a.tags || []).filter(Boolean)))];
   }, [articles]);
 
-  // Sync category state with URL param
-  useEffect(() => {
-    if (categorySlug) {
-      const match = categories.find((c) => c !== 'all' && toSlug(c) === categorySlug.toLowerCase());
-      if (match) {
-        setCategory(match);
-      }
-    } else {
-      setCategory('all');
-    }
+  // Derived from the URL rather than synced in an effect, so the first render
+  // pass already knows the category. Effects do not run when prerendering.
+  const category = useMemo(() => {
+    if (!categorySlug) return 'all';
+    return categories.find((c) => c !== 'all' && toSlug(c) === categorySlug.toLowerCase()) ?? 'all';
   }, [categorySlug, categories]);
 
   const handleCategoryChange = (val: string) => {
-    setCategory(val);
     if (val === 'all') {
       navigate(path('/blog'));
     } else {
@@ -70,18 +64,46 @@ export default function Blog() {
   const heroArticle = isDefaultView && list.length > 0 ? list[0] : null;
   const gridArticles = isDefaultView ? list.slice(1) : list;
 
+  // Category listings are filtered views of English articles, so only the
+  // default-locale URL is indexable; the other locales keep working for direct
+  // access but must not compete with it as duplicate pages.
+  const isCategoryPage = category !== 'all';
+  const categoryPath = `/blog/category/${toSlug(category)}`;
+  const canonicalUrl = isCategoryPage
+    ? `${SITE_URL}/${DEFAULT_LOCALE}${categoryPath}`
+    : `${SITE_URL}/${locale}/blog`;
+  const pageTitle = isCategoryPage ? `${category} · ${t('nav.blog')} · DrawSpace` : t('seo.blogTitle');
+  const pageDescription = isCategoryPage ? t('seo.blogCategory', { category }) : t('seo.blog');
+
   return (
     <div className="page">
       <SeoHead
-        title={
-          category !== 'all'
-            ? `${category} Guides & Articles · DrawSpace Blog`
-            : `${t('blog.title')} · DrawSpace`
-        }
-        description={
-          category !== 'all'
-            ? `Explore the best drawing game guides, word lists, and multiplayer tips for ${category} on DrawSpace.`
-            : t('blog.sub')
+        title={pageTitle}
+        description={pageDescription}
+        canonical={canonicalUrl}
+        noindex={isCategoryPage && locale !== DEFAULT_LOCALE}
+        translated={!isCategoryPage}
+        structuredData={
+          isCategoryPage
+            ? {
+                '@context': 'https://schema.org',
+                '@type': 'CollectionPage',
+                name: category,
+                description: pageDescription,
+                url: canonicalUrl,
+                inLanguage: 'en',
+                isPartOf: { '@id': `${SITE_URL}/#website` },
+              }
+            : {
+                '@context': 'https://schema.org',
+                '@type': 'Blog',
+                '@id': `${SITE_URL}/#blog`,
+                name: pageTitle,
+                description: pageDescription,
+                url: canonicalUrl,
+                inLanguage: locale,
+                publisher: { '@id': `${SITE_URL}/#organization` },
+              }
         }
       />
 
