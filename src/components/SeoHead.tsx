@@ -25,8 +25,10 @@ const SEGMENT_KEYS: Record<string, DictKey> = {
 /* Per-route document head: title, description, canonical, hreflang, Open Graph,
    Twitter Card and JSON-LD. The tag list is built once and shared with the
    prerenderer so static HTML and the live SPA can never drift apart. */
-export function SeoHead({ title, description, image = BRAND.ogHome, type = 'website', canonical: canonicalOverride, noindex = false, structuredData }: {
+export function SeoHead({ title, description, image = BRAND.ogHome, type = 'website', canonical: canonicalOverride, noindex = false, translated = true, structuredData }: {
   title: string; description?: string; image?: string; type?: 'website' | 'article'; canonical?: string; noindex?: boolean;
+  /** False for English-only editorial pages that must not claim translations. */
+  translated?: boolean;
   structuredData?: Record<string, unknown> | Array<Record<string, unknown>>;
 }) {
   const { locale, t } = useI18n();
@@ -41,6 +43,7 @@ export function SeoHead({ title, description, image = BRAND.ogHome, type = 'webs
     type,
     canonical: canonicalOverride || `${SITE_URL}${pathname}`,
     noindex,
+    translated,
     locale,
     pathname,
     siteName: config.siteName,

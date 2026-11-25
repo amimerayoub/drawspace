@@ -356,9 +356,9 @@ export const en = {
   'report.submit': 'Send report',
   'report.placeholder': 'What happened?',
 
-  'seo.homeTitle': 'Free Online Drawing & Guessing Game · DrawSpace',
+  'seo.homeTitle': 'DrawSpace – Free Online Drawing Game to Play With Friends',
   'seo.playTitle': 'Play Free: Multiplayer Drawing Game · DrawSpace',
-  'seo.home': 'DrawSpace is a free multiplayer draw and guess game. Draw, guess and learn English words with friends in your browser. No account needed.',
+  'seo.home': 'Play free online drawing and guessing games with friends. Create a room, invite friends, draw, guess, and have fun — no registration required.',
   'seo.play': 'Play DrawSpace free in your browser. Pick a name, join a public room or create a private one, and start drawing and guessing English words.',
   'seo.rules': 'How to play DrawSpace: drawing turns, the round timer, speed scoring, XP and levels, and the fair play rules every room follows.',
   'seo.leaderboard': 'The DrawSpace leaderboard ranks the top draw and guess players by XP. See who is winning and climb the ranks after every match.',

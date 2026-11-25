@@ -46,7 +46,9 @@ const dryRun = process.argv.includes('--dry');
 
 // Node resolves localhost to ::1 first, which the dev server does not bind.
 const env = loadEnv('production', root, 'VITE_');
-const origin = (env.VITE_GAME_SERVER_URL || 'https://server.drawspace.cloud')
+// An explicit environment variable wins over .env files so CI (and a local run
+// without .env.local) can point the build at the public API.
+const origin = (process.env.VITE_GAME_SERVER_URL || env.VITE_GAME_SERVER_URL || 'https://server.drawspace.cloud')
   .replace(/\/+$/, '')
   .replace('//localhost', '//127.0.0.1');
 process.env.VITE_GAME_SERVER_URL = origin;
@@ -111,6 +113,15 @@ try {
     return payload;
   });
   if (!listOk) articles = [];
+  // A missing API does not break the build, but it does silently drop every
+  // article and category page: a deploy would then ship a site whose blog URLs
+  // fall back to the empty shell. CI can set PRERENDER_REQUIRE_CONTENT=1 to turn
+  // that into a failed build instead of a quiet SEO regression.
+  const requireContent = process.env.PRERENDER_REQUIRE_CONTENT === '1';
+  if (!listOk && requireContent) {
+    console.error('blog API unreachable and PRERENDER_REQUIRE_CONTENT=1: refusing to ship without article pages');
+    process.exitCode = 1;
+  }
 
   for (const article of articles) {
     await seed(`blog article ${article.slug}`, queryKeys.blogArticle(article.slug), () => contentService.publicBlog(article.slug));

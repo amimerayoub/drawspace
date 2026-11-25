@@ -15,6 +15,12 @@ export interface HeadInput {
   type: 'website' | 'article';
   canonical: string;
   noindex: boolean;
+  /**
+   * Whether the page genuinely exists in every locale. Static UI pages are
+   * translated, so they carry the full alternate set; editorial content is
+   * English-only and must not advertise translations that do not exist.
+   */
+  translated?: boolean;
   locale: string;
   pathname: string;
   siteName: string;
@@ -197,9 +203,10 @@ export function buildHeadTags(input: HeadInput): HeadTag[] {
   ];
   for (const [key, content] of twitter) if (content) tags.push({ kind: 'meta', attr: 'name', key, content });
 
-  // hreflang only makes sense on locale-prefixed routes; invite links such as
-  // /join/CODE have no translated counterparts.
-  if (locale && !input.noindex) {
+  // hreflang only makes sense on locale-prefixed routes that really exist in
+  // every language; invite links such as /join/CODE and English-only editorial
+  // pages have no translated counterparts.
+  if (locale && !input.noindex && input.translated !== false) {
     for (const alt of alternateUrls(routePath)) {
       tags.push({ kind: 'link', rel: 'alternate', href: alt.href, hreflang: alt.hreflang });
       if (alt.hreflang !== 'x-default' && alt.hreflang !== locale) {

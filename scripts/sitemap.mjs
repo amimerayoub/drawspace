@@ -4,8 +4,10 @@
    scripts/generate-sitemap.mjs (which runs without a build) call this module,
    so the sitemap and the rendered pages cannot drift apart.
 
-   Every listed URL exists in all published locales and carries the full
-   xhtml:link alternate set plus a real lastmod. */
+   Static UI pages are translated into every locale and carry the full xhtml
+   alternate set. Articles and category listings are English-only editorial
+   content: listing them once per locale would advertise translation pages that
+   do not exist, so they appear once, at the default locale, with no alternates. */
 
 export const SITE_URL = 'https://drawspace.cloud';
 
@@ -51,15 +53,17 @@ function localizedUrl(locale, path) {
   return `${SITE_URL}/${locale}${path === '/' ? '' : path}`;
 }
 
-/** One <url> per locale variant, each listing every alternate. */
+/** One <url>; alternates only when the page really exists in every locale. */
 function urlBlock(entry, localeCodes, defaultLocale) {
   const { path, lastmod, changefreq, priority } = entry;
   const lines = ['  <url>', `    <loc>${xmlEscape(localizedUrl(entry.locale, path))}</loc>`];
-  for (const code of localeCodes) {
-    lines.push(`    <xhtml:link rel="alternate" hreflang="${code}" href="${xmlEscape(localizedUrl(code, path))}"/>`);
+  if (entry.translated !== false) {
+    for (const code of localeCodes) {
+      lines.push(`    <xhtml:link rel="alternate" hreflang="${code}" href="${xmlEscape(localizedUrl(code, path))}"/>`);
+    }
+    lines.push(`    <xhtml:link rel="alternate" hreflang="x-default" href="${xmlEscape(localizedUrl(defaultLocale, path))}"/>`);
   }
   lines.push(
-    `    <xhtml:link rel="alternate" hreflang="x-default" href="${xmlEscape(localizedUrl(defaultLocale, path))}"/>`,
     `    <lastmod>${lastmod}</lastmod>`,
     `    <changefreq>${changefreq}</changefreq>`,
     `    <priority>${priority}</priority>`,
@@ -82,7 +86,7 @@ export function buildSitemap({ locales, articles, defaultLocale }) {
   const entries = [];
   for (const page of STATIC_PAGES) {
     for (const code of codes) {
-      entries.push({ ...page, locale: code, lastmod: CONTENT_UPDATED });
+      entries.push({ ...page, locale: code, lastmod: CONTENT_UPDATED, translated: true });
     }
   }
 
@@ -92,30 +96,28 @@ export function buildSitemap({ locales, articles, defaultLocale }) {
       .map((a) => isoDate(a.updatedAt || a.publishedAt))
       .sort()
       .pop();
-    for (const code of codes) {
-      entries.push({
-        path: `/blog/category/${slug}`,
-        changefreq: 'weekly',
-        priority: '0.6',
-        locale: code,
-        lastmod: lastmod ?? CONTENT_UPDATED,
-      });
-    }
+    entries.push({
+      path: `/blog/category/${slug}`,
+      changefreq: 'weekly',
+      priority: '0.6',
+      locale: primary,
+      lastmod: lastmod ?? CONTENT_UPDATED,
+      translated: false,
+    });
   }
 
   const sorted = [...published].sort((a, b) =>
     isoDate(b.updatedAt || b.publishedAt).localeCompare(isoDate(a.updatedAt || a.publishedAt)),
   );
   for (const article of sorted) {
-    for (const code of codes) {
-      entries.push({
-        path: `/blog/${article.slug}`,
-        changefreq: 'monthly',
-        priority: '0.7',
-        locale: code,
-        lastmod: isoDate(article.updatedAt || article.publishedAt),
-      });
-    }
+    entries.push({
+      path: `/blog/${article.slug}`,
+      changefreq: 'monthly',
+      priority: '0.7',
+      locale: primary,
+      lastmod: isoDate(article.updatedAt || article.publishedAt),
+      translated: false,
+    });
   }
 
   return [

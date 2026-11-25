@@ -952,14 +952,22 @@ prerenderer, so static HTML and the live SPA cannot drift.
 Measured result of `npm run build` + `npm run seo:audit`:
 
 - 312 routes rendered, 0 failures; 626 files written.
-- 296 indexable pages (8 locales x 37 routes: home, play, rules, leaderboard, blog,
-  terms, privacy, 9 category indexes, 21 articles) plus 17 noindex pages.
-- 296 sitemap URLs, identical to the indexable route set, each with `lastmod`
+- 86 indexable pages, 226 `noindex, follow`: home, play, rules, leaderboard, blog,
+  terms and privacy in 8 locales (56), plus 21 articles and 9 category hubs listed
+  once at `en-US`.
+- 86 sitemap URLs, identical to the indexable page set, each with `lastmod`
   (articles use `updatedAt`/`publishedAt`, static copy uses `CONTENT_UPDATED`).
-- Every page: own title (<=60 chars), own description (<=155), canonical, 9 hreflang
-  links (8 locales + x-default), Organization + WebSite JSON-LD; VideoGame on
-  home/play; BlogPosting + BreadcrumbList on articles; BreadcrumbList on inner
-  pages; FAQPage on home; all JSON-LD parses.
+- Every indexable page: own title (<=60 chars), own description (<=155), canonical,
+  Organization + WebSite JSON-LD; VideoGame on home/play; BlogPosting +
+  BreadcrumbList on articles; CollectionPage + BreadcrumbList on categories;
+  BreadcrumbList on inner pages; FAQPage on home; all JSON-LD parses. Translated
+  pages carry 9 hreflang links (8 locales + x-default).
+
+Multilingual scope was narrowed in review. An earlier revision made all eight locale
+copies of every article and category hub indexable (296 URLs). Those pages exist in
+English only, so the copies differed by metadata alone; they are now `noindex, follow`
+with a canonical to the `en-US` URL, advertise no alternates and are absent from the
+sitemap. Only genuinely translated pages are indexable in all eight locales.
 
 Defects found and fixed while verifying (all of these shipped broken before):
 
@@ -992,7 +1000,15 @@ Defects found and fixed while verifying (all of these shipped broken before):
   `noindex, follow`, matching the sitemap's scope.
 - **`public/_redirects` now falls back to `/200.html`**, not `/index.html`. Real files
   still win; admin, `/join/CODE`, `/room/CODE` and unknown URLs get the empty shell
-  instead of a prerendered page for a different route.
+  instead of a prerendered page for a different route. The shell is stamped
+  `noindex, follow` at build time, so those URLs cannot be indexed.
+- **Studio-format articles had no table of contents.** Headings were only derived
+  from markdown, but every live article is a Studio doc, so the TOC block never
+  rendered on a 1,300-word guide. Now built from the Studio blocks, anchored to the
+  rendered heading ids.
+- **Article byline and `BlogPosting.author` published an internal automation id**
+  (`mcp:claude`). Author output is now gated on a publishable name and omitted
+  otherwise; a real editorial byline restores it with no code change.
 
 Verification (repeatable):
 

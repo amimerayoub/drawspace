@@ -1,7 +1,8 @@
 import { useMemo, useState } from 'react';
 import { Link, useParams, useNavigate } from 'react-router-dom';
 import { ArrowRight, Sparkles, BookOpen, Clock, Calendar } from 'lucide-react';
-import { useI18n } from '@/i18n/I18nContext';
+import { useI18n, DEFAULT_LOCALE } from '@/i18n/I18nContext';
+import { SITE_URL } from '@/seo/head';
 import { usePublicBlogs } from '@/hooks/useQueries';
 import { BlogCover } from '@/components/BlogCover';
 import { AdSlot } from '@/components/AdSlot';
@@ -13,7 +14,7 @@ function toSlug(text: string): string {
 }
 
 export default function Blog() {
-  const { t, path, formatDate } = useI18n();
+  const { t, path, formatDate, locale } = useI18n();
   const { categorySlug } = useParams<{ categorySlug?: string }>();
   const navigate = useNavigate();
 
@@ -63,11 +64,47 @@ export default function Blog() {
   const heroArticle = isDefaultView && list.length > 0 ? list[0] : null;
   const gridArticles = isDefaultView ? list.slice(1) : list;
 
+  // Category listings are filtered views of English articles, so only the
+  // default-locale URL is indexable; the other locales keep working for direct
+  // access but must not compete with it as duplicate pages.
+  const isCategoryPage = category !== 'all';
+  const categoryPath = `/blog/category/${toSlug(category)}`;
+  const canonicalUrl = isCategoryPage
+    ? `${SITE_URL}/${DEFAULT_LOCALE}${categoryPath}`
+    : `${SITE_URL}/${locale}/blog`;
+  const pageTitle = isCategoryPage ? `${category} · ${t('nav.blog')} · DrawSpace` : t('seo.blogTitle');
+  const pageDescription = isCategoryPage ? t('seo.blogCategory', { category }) : t('seo.blog');
+
   return (
     <div className="page">
       <SeoHead
-        title={category !== 'all' ? `${category} · ${t('nav.blog')} · DrawSpace` : t('seo.blogTitle')}
-        description={category !== 'all' ? t('seo.blogCategory', { category }) : t('seo.blog')}
+        title={pageTitle}
+        description={pageDescription}
+        canonical={canonicalUrl}
+        noindex={isCategoryPage && locale !== DEFAULT_LOCALE}
+        translated={!isCategoryPage}
+        structuredData={
+          isCategoryPage
+            ? {
+                '@context': 'https://schema.org',
+                '@type': 'CollectionPage',
+                name: category,
+                description: pageDescription,
+                url: canonicalUrl,
+                inLanguage: 'en',
+                isPartOf: { '@id': `${SITE_URL}/#website` },
+              }
+            : {
+                '@context': 'https://schema.org',
+                '@type': 'Blog',
+                '@id': `${SITE_URL}/#blog`,
+                name: pageTitle,
+                description: pageDescription,
+                url: canonicalUrl,
+                inLanguage: locale,
+                publisher: { '@id': `${SITE_URL}/#organization` },
+              }
+        }
       />
 
       <div className="container">
