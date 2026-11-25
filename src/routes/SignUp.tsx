@@ -52,7 +52,7 @@ export default function SignUp() {
 
   return (
     <>
-      <SeoHead title={t('auth.signUpTitle')} description={t('auth.signUpSub')} />
+      <SeoHead title={`${t('auth.signUpTitle')} · DrawSpace`} description={t('seo.signUp')} noindex />
       <AuthPanel
         mode="up"
         title={t('auth.signUpTitle')}

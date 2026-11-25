@@ -31,7 +31,7 @@ export default function Achievements() {
 
   return (
     <div className="page">
-      <SeoHead title={`${t('achievements.title')} · DrawSpace`} />
+      <SeoHead title={`${t('achievements.title')} · DrawSpace`} description={t('seo.achievements')} noindex />
       <div className="container">
         <div className="page-head">
           <h1 className="page-title">{t('achievements.title')}</h1>

@@ -1,1 +1,4 @@
-/*    /index.html   200
+# Static hosts resolve real files before this rule, so prerendered pages win.
+# Everything else (admin, join/CODE, room/CODE, unknown URLs) gets the pristine
+# SPA shell instead of a prerendered page for a different route.
+/*    /200.html   200

@@ -58,7 +58,7 @@ export default function JoinRoom() {
 
   return (
     <div className="page">
-      <SeoHead title={`${t('join.title')} · DrawSpace`} />
+      <SeoHead title={`${t('join.title')} · DrawSpace`} description={t('seo.join')} noindex />
       <div className="container container-tiny">
         <div className="page-head">
           <h1 className="page-title">{t('join.title')}</h1>

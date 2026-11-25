@@ -14,7 +14,7 @@ export default function Rules() {
 
   return (
     <div className="page">
-      <SeoHead title={`${t('rules.title')} · DrawSpace`} description={t('rules.sub')} />
+      <SeoHead title={`${t('rules.title')} · DrawSpace`} description={t('seo.rules')} />
       <div className="container container-narrow">
         <div className="page-head">
           <h1 className="page-title">{t('rules.title')}</h1>

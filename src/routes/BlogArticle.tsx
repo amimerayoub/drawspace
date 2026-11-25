@@ -24,6 +24,7 @@ import { docToPlainText, parseDoc } from '@/studio/types';
 import { StudioContent } from '@/studio/blocks';
 import { CustomCodeSection } from '@/studio/StudioArticle';
 import { BlogMarkdown, extractHeadings, extractFaqs } from '@/components/BlogMarkdown';
+import { BRAND } from '@/data/assets';
 
 function slugifyCategory(cat: string): string {
   return cat.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
@@ -79,7 +80,7 @@ export default function BlogArticle() {
       '@type': 'BlogPosting',
       headline: article.seoTitle || article.title,
       description: article.seoDescription || article.excerpt,
-      image: studio?.meta?.ogImage || article.cover || 'https://drawspace.cloud/og-home.png',
+      image: studio?.meta?.ogImage || article.cover || BRAND.ogHome,
       datePublished: article.publishedAt,
       dateModified: article.updatedAt || article.publishedAt,
       author: {
@@ -93,7 +94,7 @@ export default function BlogArticle() {
         url: 'https://drawspace.cloud',
         logo: {
           '@type': 'ImageObject',
-          url: 'https://drawspace.cloud/logo.png',
+          url: 'https://drawspace.cloud/favicon-192.png',
         },
       },
       mainEntityOfPage: {

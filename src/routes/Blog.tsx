@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect } from 'react';
+import { useMemo, useState } from 'react';
 import { Link, useParams, useNavigate } from 'react-router-dom';
 import { ArrowRight, Sparkles, BookOpen, Clock, Calendar } from 'lucide-react';
 import { useI18n } from '@/i18n/I18nContext';
@@ -17,7 +17,6 @@ export default function Blog() {
   const { categorySlug } = useParams<{ categorySlug?: string }>();
   const navigate = useNavigate();
 
-  const [category, setCategory] = useState('all');
   const [tag, setTag] = useState('all');
   const [search, setSearch] = useState('');
 
@@ -33,20 +32,14 @@ export default function Blog() {
     return ['all', ...Array.from(new Set(articles.flatMap((a) => a.tags || []).filter(Boolean)))];
   }, [articles]);
 
-  // Sync category state with URL param
-  useEffect(() => {
-    if (categorySlug) {
-      const match = categories.find((c) => c !== 'all' && toSlug(c) === categorySlug.toLowerCase());
-      if (match) {
-        setCategory(match);
-      }
-    } else {
-      setCategory('all');
-    }
+  // Derived from the URL rather than synced in an effect, so the first render
+  // pass already knows the category. Effects do not run when prerendering.
+  const category = useMemo(() => {
+    if (!categorySlug) return 'all';
+    return categories.find((c) => c !== 'all' && toSlug(c) === categorySlug.toLowerCase()) ?? 'all';
   }, [categorySlug, categories]);
 
   const handleCategoryChange = (val: string) => {
-    setCategory(val);
     if (val === 'all') {
       navigate(path('/blog'));
     } else {
@@ -73,16 +66,8 @@ export default function Blog() {
   return (
     <div className="page">
       <SeoHead
-        title={
-          category !== 'all'
-            ? `${category} Guides & Articles · DrawSpace Blog`
-            : `${t('blog.title')} · DrawSpace`
-        }
-        description={
-          category !== 'all'
-            ? `Explore the best drawing game guides, word lists, and multiplayer tips for ${category} on DrawSpace.`
-            : t('blog.sub')
-        }
+        title={category !== 'all' ? `${category} · ${t('nav.blog')} · DrawSpace` : t('seo.blogTitle')}
+        description={category !== 'all' ? t('seo.blogCategory', { category }) : t('seo.blog')}
       />
 
       <div className="container">

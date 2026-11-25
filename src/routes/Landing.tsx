@@ -69,25 +69,27 @@ function GamePreview() {
   );
 }
 
+const FAQ_ITEMS: { q: DictKey; a: DictKey }[] = [
+  { q: 'landing.faq1Q', a: 'landing.faq1A' },
+  { q: 'landing.faq2Q', a: 'landing.faq2A' },
+  { q: 'landing.faq3Q', a: 'landing.faq3A' },
+  { q: 'landing.faq4Q', a: 'landing.faq4A' },
+  { q: 'landing.faq5Q', a: 'landing.faq5A' },
+];
+
 function Faq() {
   const { t } = useI18n();
   const [open, setOpen] = useState(0);
-  const items: { q: DictKey; a: DictKey }[] = [
-    { q: 'landing.faq1Q', a: 'landing.faq1A' },
-    { q: 'landing.faq2Q', a: 'landing.faq2A' },
-    { q: 'landing.faq3Q', a: 'landing.faq3A' },
-    { q: 'landing.faq4Q', a: 'landing.faq4A' },
-    { q: 'landing.faq5Q', a: 'landing.faq5A' },
-  ];
   return (
     <div className="faq">
-      {items.map((item, i) => (
+      {FAQ_ITEMS.map((item, i) => (
         <div key={item.q} className={`faq-item ${open === i ? 'open' : ''}`}>
           <button className="faq-q" onClick={() => setOpen(open === i ? -1 : i)} aria-expanded={open === i}>
             <span>{t(item.q)}</span>
             <ChevronDown size={16} className="faq-chevron" aria-hidden />
           </button>
-          {open === i && <p className="faq-a muted">{t(item.a)}</p>}
+          {/* Kept in the DOM while collapsed: FAQPage markup must describe text that is on the page, and `hidden` renders identically. */}
+          <p className="faq-a muted" hidden={open !== i}>{t(item.a)}</p>
         </div>
       ))}
     </div>
@@ -107,7 +109,19 @@ export default function Landing() {
 
   return (
     <>
-      <SeoHead title="DrawSpace · Draw, guess, learn English" description={t('landing.heroSub')} />
+      <SeoHead
+        title={t('seo.homeTitle')}
+        description={t('seo.home')}
+        structuredData={{
+          '@context': 'https://schema.org',
+          '@type': 'FAQPage',
+          mainEntity: FAQ_ITEMS.map((item) => ({
+            '@type': 'Question',
+            name: t(item.q),
+            acceptedAnswer: { '@type': 'Answer', text: t(item.a) },
+          })),
+        }}
+      />
 
       <section className="hero">
         <div className="container">

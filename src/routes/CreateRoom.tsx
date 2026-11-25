@@ -51,7 +51,7 @@ export default function CreateRoom() {
 
   return (
     <div className="page">
-      <SeoHead title={`${t('create.title')} · DrawSpace`} />
+      <SeoHead title={`${t('create.title')} · DrawSpace`} description={t('seo.create')} noindex />
       <div className="container container-narrow">
         <div className="page-head">
           <h1 className="page-title">{t('create.title')}</h1>

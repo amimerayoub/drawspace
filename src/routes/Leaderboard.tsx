@@ -22,7 +22,7 @@ export default function Leaderboard() {
 
   return (
     <div className="page">
-      <SeoHead title={`${t('leaderboard.title')} · DrawSpace`} description={t('leaderboard.sub')} />
+      <SeoHead title={`${t('leaderboard.title')} · DrawSpace`} description={t('seo.leaderboard')} />
       <div className="container container-narrow">
         <div className="page-head">
           <h1 className="page-title">{t('leaderboard.title')}</h1>

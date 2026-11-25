@@ -11,7 +11,7 @@ export default function Results() {
   if (!user) return <Navigate to={path('/play')} replace />;
   return (
     <div className="page container container-narrow">
-      <SeoHead title={`${t('results.title')} · DrawSpace`} />
+      <SeoHead title={`${t('results.title')} · DrawSpace`} description={t('seo.results')} noindex />
       <EmptyState
         title={t('results.title')}
         body={`Results for ${code?.toUpperCase() || 'this match'} are shown in the game room. Open your profile to review saved match history.`}

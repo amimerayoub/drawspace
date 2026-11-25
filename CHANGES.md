@@ -934,3 +934,81 @@ the play/create routes. The 8 category clusters exist, but cross-article links n
 
 Nine drafts outside the 20 blueprints still hold the literal body
 `[DRAFT PLACEHOLDER - article body not yet written]`. They were preserved, not deleted.
+
+## SEO rebuild â€” prerendered HTML, per-route metadata, sitemap, structured data, hreflang
+
+Every public route now ships a fully rendered document. The SPA shell is gone from
+crawler responses: `scripts/build.mjs` runs `vite build`, keeps a pristine shell at
+`dist/200.html`, then `scripts/prerender.mjs` renders each route with Vite's SSR
+loader (`renderToString` + `StaticRouter`) and writes `dist/<locale>/<path>.html`
+and `dist/<locale>/<path>/index.html`. No browser or Chromium is needed, so the
+Cloudflare build image can run it.
+
+Head management has one source of truth. `src/seo/head.ts#buildHeadTags` produces the
+tag list (title, description, robots, canonical, hreflang, Open Graph, Twitter Card,
+JSON-LD); `SeoHead` applies it in the browser and `HeadCollector` hands it to the
+prerenderer, so static HTML and the live SPA cannot drift.
+
+Measured result of `npm run build` + `npm run seo:audit`:
+
+- 312 routes rendered, 0 failures; 626 files written.
+- 296 indexable pages (8 locales x 37 routes: home, play, rules, leaderboard, blog,
+  terms, privacy, 9 category indexes, 21 articles) plus 17 noindex pages.
+- 296 sitemap URLs, identical to the indexable route set, each with `lastmod`
+  (articles use `updatedAt`/`publishedAt`, static copy uses `CONTENT_UPDATED`).
+- Every page: own title (<=60 chars), own description (<=155), canonical, 9 hreflang
+  links (8 locales + x-default), Organization + WebSite JSON-LD; VideoGame on
+  home/play; BlogPosting + BreadcrumbList on articles; BreadcrumbList on inner
+  pages; FAQPage on home; all JSON-LD parses.
+
+Defects found and fixed while verifying (all of these shipped broken before):
+
+- **320 of 627 prerendered pages were error shells.** `sanitizeHtml` calls
+  `DOMParser`, which does not exist in Node, so every article and category page
+  rendered `<!--$!-->` with the stack in a `<template>`. The head tags were still
+  collected, so the prerenderer reported success. Fixed by polyfilling `DOMParser`
+  in `scripts/prerender.mjs` with a fragment shim over `linkedom` (devDependency;
+  never bundled), so the prerenderer runs the same sanitizer as the browser.
+  The prerenderer now also fails the build when a route renders an error boundary,
+  which is what would have caught this the first time.
+- **Sitemap listed 2 of 21 articles** and no category pages. `scripts/sitemap.mjs`
+  is now the single generator used by both the prerenderer and
+  `scripts/generate-sitemap.mjs`, driven by the same article list the pages were
+  rendered from. When the blog API is unreachable during a build the copied
+  `public/sitemap.xml` is kept instead of being overwritten with a shorter list.
+- **Home title was hardcoded English** for all 8 locales and the play title was 15
+  characters. Added `seo.homeTitle` / `seo.playTitle` in all 8 dictionaries.
+- **No FAQPage** even though the landing page has five real questions, and collapsed
+  answers were unmounted. Answers now stay in the DOM behind `hidden` (visually
+  identical, accordion behaviour unchanged) and the schema is generated from the
+  same `FAQ_ITEMS` array.
+- **BlogPosting pointed at two 404 images** (`/og-home.png`, `/logo.png`). Now
+  `BRAND.ogHome` and `/favicon-192.png`.
+- **Duplicate hreflang after client-side navigation:** the prerendered tags carry no
+  `data-seo` marker, so `applyHeadTags` left them behind and a page ended up with 18
+  links, half of them pointing at the previous route. All `link[rel=alternate][hreflang]`
+  are now cleared before the new set is applied.
+- **Sign-in / sign-up were indexable but absent from the sitemap.** They are now
+  `noindex, follow`, matching the sitemap's scope.
+- **`public/_redirects` now falls back to `/200.html`**, not `/index.html`. Real files
+  still win; admin, `/join/CODE`, `/room/CODE` and unknown URLs get the empty shell
+  instead of a prerendered page for a different route.
+
+Verification (repeatable):
+
+```
+npm run build      # tsc, vite build, 312-route prerender, sitemap
+npm run seo:audit  # fails on missing/duplicate metadata, error shells, sitemap drift
+npm run sitemap    # refresh public/sitemap.xml without a build
+```
+
+Serving notes: Cloudflare Pages resolves real files before `_redirects`, and both
+`<path>.html` and `<path>/index.html` are written for every route, so either
+extensionless resolution behaviour finds the prerendered document. `dist/200.html`
+is the fallback shell. The root `/` serves the en-US home with a canonical pointing at
+`/en-US`; `/` itself is intentionally not in the sitemap.
+
+Known follow-up (not changed here): `src/main.tsx` still uses `createRoot`, so the
+prerendered markup is replaced by a client render on load. Crawlers already receive
+the full document; switching to `hydrateRoot` would only remove the re-render and is
+left as a separate, independently testable change.
