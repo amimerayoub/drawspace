@@ -73,7 +73,7 @@ Every row below was checked against the **raw HTTP response** of the deployed si
 | Metadata | One title and one description site-wide; canonical on `/`, `/fr/blog`, `/en-US/blog/<slug>` all pointed at `https://drawspace.cloud/` | Duplicate metadata, wrong canonicals, self-cannibalising | Unique title/description/canonical per indexable URL, 60/155-char budgets |
 | Structured data | None anywhere | No entity, no article, no breadcrumb signals | JSON-LD per page type, validated at build time |
 | Multilingual SEO | `lang="en-US"` in the static shell for **every** URL, including `/fr/*` and `/ar/*`; 0 alternates; no `dir` | Wrong language declaration, no `hreflang`, RTL not declared | Per-locale `lang`/`dir` in prerendered HTML, 8 alternates + `x-default` |
-| Cloudflare deployment | `_redirects` sent every unknown path to the SPA shell (which was the homepage head) | Non-prerendered URLs (admin, invites, typos) would have been indexable | Fallback now points at a **noindex** `200.html` |
+| Cloudflare deployment | `_redirects` sent every unknown path to the SPA shell (which was the homepage head) | Non-prerendered URLs (admin, invites, typos) would have been indexable | First attempt pointed the fallback at a noindex `200.html`; that broke production (§4.3). The fallback is now `/index.html` again, and the soft-404 trade-off is accepted |
 
 ### 4.2 Problems found while verifying this implementation (fixed in this pass)
 
@@ -85,6 +85,31 @@ Every row below was checked against the **raw HTTP response** of the deployed si
 | `public/sitemap.xml` still held the older 296-URL all-locale list (noindex pages included) | `Compare-Object` vs `dist/sitemap.xml` | Regenerated; `public/` and `dist/` are now byte-identical (verified by SHA-256) |
 | A build without content access silently shipped a blog-less site | `scripts/prerender.mjs` swallowed the API error | `PRERENDER_REQUIRE_CONTENT=1` turns a missing content API into a failed build |
 | The SPA fallback shell was indexable | `dist/200.html` had `index, follow` | `scripts/build.mjs` stamps `noindex, follow` on the shell copy; `audit-seo.mjs` now fails if it is missing |
+
+### 4.3 Production incident (2026-11-25): fallback rewrite took the site down
+
+The first version of this work pointed the SPA fallback at a freshly built shell:
+`/* /200.html 200`. Local verification could not catch it, because a plain static
+file server does not implement Cloudflare Pages redirect rules — `dist/200.html`
+was served normally on `127.0.0.1:4175`.
+
+On Pages, a `200` rewrite whose destination is a non-index `.html` file is
+normalised: `/200.html` becomes `/200`, the rule is emitted as a real
+`308 Permanent Redirect`, and the extensionless target matches `/*` again. Result:
+
+- every path — `/`, `/en-US`, articles, `/sitemap.xml`, `/robots.txt`, even
+  `/assets/*.js` and `/favicon-32.png` — returned `308 Location: /200`;
+- `/200` redirected to itself, so browsers showed `ERR_TOO_MANY_REDIRECTS`;
+- because the rule acted as a redirect (not a rewrite), it also shadowed real
+  static assets, so not even JavaScript could load.
+
+Fix: point the fallback back at `index.html`, which Pages treats as a rewrite.
+Verified live after redeploy: pages, assets, sitemap and robots all 200.
+
+**Lesson for any future fallback change: a `_redirects` rule can only be proven on
+a Pages preview deployment or production, never on a local static server.** The
+soft-404 trade-off of `/index.html` (unknown URLs return the homepage head with
+status 200) is the accepted cost of availability.
 
 **Distinction:** all rows above are verified from raw output or source. No problem in this report is assumed. The only unverified assumption carried over from the earlier audit — that Appwrite content is English-only — was confirmed by inspecting the 21 returned documents (no localized title/body fields exist).
 
@@ -110,7 +135,7 @@ How it works (`scripts/build.mjs` → `vite build` → `node scripts/prerender.m
 3. Each route is rendered with `renderToString(<StaticRouter location="/<locale>/<path>">…)`. `SeoHead` detects the absence of a DOM and hands its tag list to `HeadCollectorProvider` instead of mutating `document.head`.
 4. `buildDocument()` injects the tags into a copy of `index.html`, rewrites `<html lang dir>`, strips the static baseline head, and puts the markup inside `<div id="root">`.
 5. Each page is written twice — `dist/<locale>/<path>.html` and `dist/<locale>/<path>/index.html` — so Cloudflare serves it for both `/fr/play` and `/fr/play/`.
-6. `dist/index.html` is the prerendered `en-US` page (canonical → `/en-US`); the untouched shell is copied to `dist/200.html` and stamped `noindex, follow` for everything that must stay client-side.
+6. `dist/index.html` is the prerendered `en-US` page (canonical → `/en-US`) and is also what `_redirects` rewrites non-prerendered routes to. A pristine shell is still written to `dist/200.html` and stamped `noindex, follow`, but **nothing routes to it** — see §4.3 for why pointing `_redirects` at it is unsafe.
 7. A route that renders the React error boundary (`<!--$!-->`) fails the build instead of shipping an empty page.
 
 Interactive routes (canvas, `/game/:code`, `/room/:code`, `/results`, `/join/:code`, `/admin/*`, profile, achievements, challenges) are intentionally **not** prerendered; they keep the SPA shell with `noindex`.
@@ -145,7 +170,7 @@ One non-obvious build detail: the article sanitizer uses the browser `DOMParser`
 | `src/routes/Blog.tsx` | Derived `isCategoryPage` / `canonicalUrl` / `pageTitle` / `pageDescription`; `Blog` schema on the index, `CollectionPage` on categories; category and non-English variants `noindex` |
 | `src/routes/BlogArticle.tsx` | Canonical pinned to `/en-US/blog/<slug>`, non-default locales `noindex`; Studio TOC (`collectHeadings`); `publicAuthorName` guard on byline and `BlogPosting.author`; breadcrumbs from the default locale |
 | 21 other route files | Pass page-level metadata to `SeoHead` (2-line changes each), so no public page falls back to the generic title |
-| `public/_redirects` | `/* /200.html 200` (was `/index.html`) — static files still win, everything else gets the noindex shell |
+| `public/_redirects` | `/* /index.html 200` — the SPA fallback that Pages can serve as a rewrite. Reverted after the `/200.html` attempt caused a production redirect loop (§4.3) |
 | `public/sitemap.xml` | Regenerated: 58 → 86 URLs, byte-identical to `dist/sitemap.xml` |
 
 `server/` was not modified. No feature was removed, no route was deleted, no test was weakened.
@@ -234,7 +259,7 @@ Localized homepages were rewritten per language rather than copied from English:
 | Build command | `npm run build` → `tsc --noEmit && node scripts/build.mjs` |
 | Output directory | `dist` |
 | Prerendered files | `dist/<locale>/<path>.html` **and** `dist/<locale>/<path>/index.html`, so `/fr/play` and `/fr/play/` both resolve to real files |
-| SPA fallback | `public/_redirects`: `/* /200.html 200`. Cloudflare resolves static files before `_redirects`, so prerendered pages win; only `admin`, invites and unknown URLs reach the fallback — which is now `noindex, follow` and contains the pristine `<div id="root"></div>` |
+| SPA fallback | `public/_redirects`: `/* /index.html 200`. Pages serves this as a rewrite: prerendered files win, and `admin`, invites and unknown URLs get the built `index.html` so the SPA boots. The destination **must** be `index.html` — any other `.html` target is normalised to an extensionless URL, which turns the rule into a 308 that re-matches `/*` and loops (§4.3) |
 | No conflicting catch-all | No `index.html` catch-all is configured; if the dashboard's SPA-fallback switch is on, `_redirects` still matches first, but it is cleaner to leave it off |
 | Asset paths | Vite emits absolute `/assets/<hash>.js` URLs; prerendered pages live at any depth, so relative paths were never an option |
 | Caching / headers | `public/_headers` is copied verbatim into `dist/` (CSP Report-Only, immutable `/assets/*` and `/fonts/*`) |
@@ -366,7 +391,12 @@ Stated plainly; none of these is hidden behind a "done" claim.
 7. **Prerendering does not shrink JavaScript.** SEO pages carry the full SPA bundle; a future step could ship a lighter entry for prerendered content. Out of scope here (would touch routing).
 8. **`dist/` is gitignored.** Prerendered HTML is a build artifact by design — it must never be committed, or it will drift from content.
 9. **`alt` quality, not just presence.** Coverage is 100 % on the audited pages, but some images are decorative; that is an authoring concern, not a code one.
-10. **Article language coverage.** 21 articles and 9 categories exist only in English. If real translations are added, set `translated` and `noindex` accordingly and they become indexable automatically — the machinery is already per-page.
+10. **Soft 404s on unknown URLs.** Because the fallback is `/index.html`, a
+    mistyped URL returns the homepage head with status 200 instead of a 404. The
+    alternative — a `404.html` shell with no catch-all — is cleaner for crawlers but
+    must be proven on a Pages preview first (see §4.3 for why local tests are not
+    evidence). Not attempted again without that verification.
+11. **Article language coverage.** 21 articles and 9 categories exist only in English. If real translations are added, set `translated` and `noindex` accordingly and they become indexable automatically — the machinery is already per-page.
 11. **No sitemap index.** Correct at 86 URLs; revisit only past ~45,000.
 
 ---
@@ -394,7 +424,7 @@ git push -u origin codex/drawspace-seo-recovery
 | Build output directory | `dist` |
 | Root directory | repository root |
 | Node version | `NODE_VERSION=20` (or 22) if you pin one; default is fine |
-| SPA fallback / "single-page app" toggle | leave **off** — `public/_redirects` already provides `/* /200.html 200` |
+| SPA fallback / "single-page app" toggle | leave **off** — `public/_redirects` already provides `/* /index.html 200` |
 
 **Step 2 — environment variables (Production and Preview).**
 

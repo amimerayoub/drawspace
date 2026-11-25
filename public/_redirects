@@ -1,4 +1,7 @@
-# Static hosts resolve real files before this rule, so prerendered pages win.
-# Everything else (admin, join/CODE, room/CODE, unknown URLs) gets the pristine
-# SPA shell instead of a prerendered page for a different route.
-/*    /200.html   200
+# Prerendered pages are real files and are served directly.
+# Everything else (admin, /join/CODE, /room/CODE, unknown URLs) is rewritten to
+# the built index.html so the SPA can boot and route on the client.
+# NEVER point this rule at a non-index .html file such as /200.html: Pages
+# normalises that target to /200 and turns the rule into a real 308, which then
+# re-matches /* and loops forever. That took the whole site down on 2026-11-25.
+/*    /index.html   200
